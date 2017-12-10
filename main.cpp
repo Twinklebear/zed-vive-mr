@@ -160,6 +160,35 @@ int main(int argc, char **argv) {
 		glViewport(0, 0, WIN_WIDTH, WIN_HEIGHT);
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+		// Render the virtual scene from the camera's viewpoint
+		if (zed_controller != vr::k_unTrackedDeviceIndexInvalid
+				&& controllers[zed_controller] != vr::k_unTrackedDeviceIndexInvalid)
+		{
+			std::vector<glm::mat4> view_info(2, glm::mat4(1));
+			view_info[0] = glm::inverse(controller_poses[zed_controller]);
+				/*
+				* glm::translate(glm::vec3(-0.1172772f, -0.04968496f, -0.01370035f))
+				* glm::rotate(glm::radians(2.951431f), glm::vec3(1.f, 0.f, 0.f))
+				* glm::rotate(glm::radians(2.932397f), glm::vec3(0.f, 1.f, 0.f))
+				* glm::rotate(glm::radians(1.664886f), glm::vec3(0.f, 0.f, 1.f));
+				* */
+
+			view_info[1] = glm::perspective(glm::radians(42.8344f),
+					static_cast<float>(WIN_WIDTH) / static_cast<float>(WIN_HEIGHT),
+					0.1f, 150.f);
+			glBindBuffer(GL_UNIFORM_BUFFER, view_info_buf);
+			glBufferData(GL_UNIFORM_BUFFER, view_info.size() * sizeof(glm::mat4),
+					view_info.data(), GL_STREAM_DRAW);
+
+			for (size_t i = 0; i < controllers.size(); ++i) {
+				if (controllers[i] != vr::k_unTrackedDeviceIndexInvalid) {
+					controller.set_model_mat(controller_poses[i]);
+					controller.render();
+				}
+			}
+		}
+
 #if 0
 		if (zed.grab(runtime_params) == sl::SUCCESS) {
 			zed.retrieveImage(image, sl::VIEW_LEFT);
