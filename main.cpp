@@ -1,4 +1,5 @@
 #include <iostream>
+#include <array>
 #include <memory>
 #include <stdexcept>
 #define SDL_MAIN_HANDLED
@@ -78,8 +79,11 @@ int main(int argc, char **argv) {
 	const std::string res_path = get_resource_path();
 	ObjModel controller(res_path + "controller.obj");
 
-	auto right_hand_id = vr->system->GetTrackedDeviceIndexForControllerRole(vr::TrackedControllerRole_RightHand);
-	auto left_hand_id = vr->system->GetTrackedDeviceIndexForControllerRole(vr::TrackedControllerRole_LeftHand);
+	vr::TrackedDeviceIndex_t zed_controller = -1;
+	std::array<vr::TrackedDeviceIndex_t, 2> controllers = {
+		vr->system->GetTrackedDeviceIndexForControllerRole(vr::TrackedControllerRole_RightHand),
+		vr->system->GetTrackedDeviceIndexForControllerRole(vr::TrackedControllerRole_LeftHand)
+	};
 
 	GLuint view_info_buf;
 	glGenBuffers(1, &view_info_buf);
@@ -105,22 +109,34 @@ int main(int argc, char **argv) {
 		while (vr->system->PollNextEvent(&vr_evt, sizeof(vr_evt))) {
 			switch (vr_evt.eventType) {
 				case vr::VREvent_TrackedDeviceRoleChanged:
-					right_hand_id = vr->system->GetTrackedDeviceIndexForControllerRole(
+					controllers[0] = vr->system->GetTrackedDeviceIndexForControllerRole(
 							vr::TrackedControllerRole_RightHand);
-					left_hand_id = vr->system->GetTrackedDeviceIndexForControllerRole(
+					controllers[1] = vr->system->GetTrackedDeviceIndexForControllerRole(
 							vr::TrackedControllerRole_LeftHand);
+					std::cout << "Got controller role change\n";
+					break;
+				case vr::VREvent_ButtonPress:
+					if (vr_evt.data.controller.button == vr::k_EButton_SteamVR_Trigger) {
+						if (vr_evt.trackedDeviceIndex == controllers[0]) {
+							zed_controller = 1;
+						} else {
+							zed_controller = 0;
+						}
+						std::cout << "ZED camera is tracked by controller "
+							<< zed_controller << "\n";
+					}
+					break;
+				default:
 					break;
 			}
 		}
 
-		glm::mat4 right_hand_pose, left_hand_pose;
-		if (right_hand_id != vr::k_unTrackedDeviceIndexInvalid) {
-			right_hand_pose = openvr_m34_to_mat4(
-					vr->tracked_device_poses[right_hand_id].mDeviceToAbsoluteTracking);
-		}
-		if (left_hand_id != vr::k_unTrackedDeviceIndexInvalid) {
-			left_hand_pose = openvr_m34_to_mat4(
-					vr->tracked_device_poses[left_hand_id].mDeviceToAbsoluteTracking);
+		std::array<glm::mat4, 2> controller_poses;
+		for (size_t i = 0; i < controllers.size(); ++i) {
+			if (controllers[i] != vr::k_unTrackedDeviceIndexInvalid) {
+				controller_poses[i] = openvr_m34_to_mat4(
+					vr->tracked_device_poses[controllers[i]].mDeviceToAbsoluteTracking);
+			}
 		}
 
 		vr->begin_frame();
@@ -132,13 +148,11 @@ int main(int argc, char **argv) {
 					view_info.data(), GL_STREAM_DRAW);
 
 			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-			if (right_hand_id != vr::k_unTrackedDeviceIndexInvalid) {
-				controller.set_model_mat(right_hand_pose);
-				controller.render();
-			}
-			if (left_hand_id != vr::k_unTrackedDeviceIndexInvalid) {
-				controller.set_model_mat(left_hand_pose);
-				controller.render();
+			for (size_t i = 0; i < controllers.size(); ++i) {
+				if (controllers[i] != vr::k_unTrackedDeviceIndexInvalid) {
+					controller.set_model_mat(controller_poses[i]);
+					controller.render();
+				}
 			}
 		}
 		vr->display();
