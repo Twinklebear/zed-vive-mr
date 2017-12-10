@@ -248,10 +248,10 @@ int main(int argc, char **argv) {
 
 			// TODO: Parse the ZED offset calibration file for the translation, rotation
 			// and FOV info
-			glm::mat4 camera_offset = glm::translate(glm::vec3(-0.1172772f, -0.04968496f, -0.01370035f))
-				* glm::mat4(glm::quat(glm::vec3(glm::radians(2.951431f), glm::radians(2.932397f),
-								glm::radians(1.664886f))));
-			view_info.view = glm::inverse(camera_offset * controller_poses[zed_controller]);
+			glm::mat4 camera_offset = glm::translate(glm::vec3(-0.2166734f, -0.1612207f, 0.008288212f))
+				* glm::mat4(glm::quat(glm::vec3(glm::radians(357.9935f), glm::radians(5.753352f),
+								glm::radians(359.645f))));
+			view_info.view = glm::inverse(controller_poses[zed_controller] * camera_offset);
 			view_info.eye_pos = glm::column(view_info.view, 3);
 
 			view_info.proj = zed_projection_matrix(zed);

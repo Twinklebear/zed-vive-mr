@@ -17,8 +17,11 @@ void main(void) {
 	// Y-flip for textures
 	uv.y = 1.0 - uv.y;
 	float depth = texture(cam_depth, uv).x;
+	depth = -depth * 2 + 1;
+	vec4 depth_p = proj * vec4(0, 0, depth, 1);
+	depth = depth_p.z / depth_p.w;
 	if (!isinf(depth) && !isnan(depth)) {
-		if (proj_pos.z / gl_FragCoord.w >= depth) {
+		if (gl_FragCoord.z >= depth) {
 			discard;
 		}
 	}
