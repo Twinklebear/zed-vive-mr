@@ -6,15 +6,19 @@
 #include "gl_core_4_5.h"
 
 class ObjModel {
-	GLuint shader;
+	GLuint shader, vao;
 	GLuint model_mat_unif;
 	glm::mat4 model_mat;
 
+	struct Vertex {
+		glm::vec3 pos, normal;
+	};
+
 	struct Model {
 		size_t num_verts;
-		GLuint vao, vbo;
+		GLuint verts_buf, ebo;
 
-		Model(const std::vector<glm::vec3> &verts);
+		Model(const std::vector<Vertex> &verts, const std::vector<uint16_t> &indices);
 		~Model();
 	};
 

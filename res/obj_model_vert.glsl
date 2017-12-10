@@ -4,9 +4,20 @@
 
 uniform mat4 model_mat;
 
-layout(location = 0) in vec3 pos;
+struct Vertex {
+	float px, py, pz;
+	float nx, ny, nz;
+};
+
+layout(binding = 1, std430) buffer VertexBlock {
+	Vertex vertices[];
+};
+
+out vec3 vnormal;
 
 void main(void) {
-	gl_Position = proj * view * model_mat * vec4(pos, 1.0);
+	Vertex vert = vertices[gl_VertexID];
+	gl_Position = proj * view * model_mat * vec4(vert.px, vert.py, vert.pz, 1.0);
+	vnormal = vec3(vert.ny, vert.nx, vert.nz);
 }
 

@@ -1,4 +1,5 @@
 #include <iostream>
+#include <map>
 #include <glm/ext.hpp>
 #include "util.h"
 #include "obj_model.h"
@@ -6,25 +7,33 @@
 #define TINYOBJLOADER_IMPLEMENTATION
 #include "tiny_obj_loader.h"
 
-ObjModel::Model::Model(const std::vector<glm::vec3> &verts) : num_verts(verts.size()) {
-	glGenVertexArrays(1, &vao);
-	glGenBuffers(1, &vbo);
-
-	glBindVertexArray(vao);
-	glBindBuffer(GL_ARRAY_BUFFER, vbo);
-	glBufferData(GL_ARRAY_BUFFER, verts.size() * sizeof(glm::vec3),
+ObjModel::Model::Model(const std::vector<Vertex> &verts, const std::vector<uint16_t> &indices)
+	: num_verts(indices.size())
+{
+	glGenBuffers(1, &verts_buf);
+	glGenBuffers(1, &ebo);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, verts_buf);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, verts.size() * sizeof(Vertex),
 			verts.data(), GL_STATIC_DRAW);
-
-	glEnableVertexAttribArray(0);
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
-	glBindVertexArray(0);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(uint16_t),
+			indices.data(), GL_STATIC_DRAW);
 }
 ObjModel::Model::~Model() {
-	glDeleteVertexArrays(1, &vao);
-	glDeleteBuffers(1, &vbo);
+	glDeleteBuffers(1, &verts_buf);
+	glDeleteBuffers(1, &ebo);
 }
 
+struct Compare {
+	bool operator()(const tinyobj::index_t &i1, const tinyobj::index_t &i2) const {
+		return std::tie(i1.vertex_index, i1.normal_index, i1.texcoord_index)
+			< std::tie(i2.vertex_index, i2.normal_index, i2.texcoord_index);
+	}
+};
+
 ObjModel::ObjModel(const std::string &file) {
+	glGenVertexArrays(1, &vao);
+
 	const std::string res_path = get_resource_path();
 	shader = load_program({
 		std::make_pair(GL_VERTEX_SHADER, res_path + "obj_model_vert.glsl"),
@@ -41,34 +50,55 @@ ObjModel::ObjModel(const std::string &file) {
 		throw std::runtime_error("Failed to load OBJ");
 	}
 
+	std::cout << "Loaded " << shapes.size() << " shapes" << std::endl;
 	for (auto &s : shapes) {
 		std::vector<uint16_t> indices;
-		std::vector<glm::vec3> vertices;
+		std::vector<Vertex> vertices;
+		std::map<tinyobj::index_t, uint16_t, Compare> vertex_indices;
 
 		size_t index_offset = 0;
 		for (auto &fv : s.mesh.num_face_vertices) {
 			for (int v = 0; v < fv; ++v, ++index_offset) {
 				const tinyobj::index_t idx = s.mesh.indices[index_offset];
-				vertices.emplace_back(attrib.vertices[3 * idx.vertex_index],
-						attrib.vertices[3 * idx.vertex_index + 1],
-						attrib.vertices[3 * idx.vertex_index + 2]);
+				auto fnd = vertex_indices.find(idx);
+				uint16_t index = 0;
+				if (fnd == vertex_indices.end()) {
+					Vertex vertex;
+					for (size_t j = 0; j < 3; ++j) {
+						vertex.pos[j] = attrib.vertices[3 * idx.vertex_index + j];
+						if (idx.normal_index != -1) {
+							vertex.normal[j] = attrib.normals[3 * idx.normal_index + j];
+						} else {
+							vertex.normal[j] = 1;
+						}
+					}
+					index = vertices.size();
+					vertex_indices[idx] = index;
+					vertices.push_back(vertex);
+				} else {
+					index = fnd->second;
+				}
+				indices.push_back(index);
 			}
 		}
-		models.emplace_back(vertices);
+		models.emplace_back(vertices, indices);
 	}
 }
 ObjModel::~ObjModel() {
 	glDeleteProgram(shader);
+	glDeleteVertexArrays(1, &vao);
 }
 void ObjModel::set_model_mat(const glm::mat4 &mat) {
 	model_mat = mat;
 }
 void ObjModel::render() const {
 	glUseProgram(shader);
+	glBindVertexArray(vao);
 	glUniformMatrix4fv(model_mat_unif, 1, GL_FALSE, glm::value_ptr(model_mat));
 	for (const auto &m : models) {
-		glBindVertexArray(m.vao);
-		glDrawArrays(GL_TRIANGLES, 0, m.num_verts);
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m.ebo);
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m.verts_buf);
+		glDrawElements(GL_TRIANGLES, m.num_verts, GL_UNSIGNED_SHORT, 0);
 	}
 }
 
