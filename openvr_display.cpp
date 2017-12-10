@@ -5,25 +5,6 @@
 
 #include "openvr_display.h"
 
-static glm::mat4 m34_to_mat4(const vr::HmdMatrix34_t &t) {
-	return glm::mat4(
-		t.m[0][0], t.m[1][0], t.m[2][0], 0.0f,
-		t.m[0][1], t.m[1][1], t.m[2][1], 0.0f,
-		t.m[0][2], t.m[1][2], t.m[2][2], 0.0f,
-		t.m[0][3], t.m[1][3], t.m[2][3], 1.0f
-	);
-}
-
-static glm::mat4 mk_projection_mat(const float left, const float right,
-		const float top, const float bottom, const float near_clip)
-{
-	return glm::mat4(
-		2.0f/(right - left), 0.0f, 0.0f, 0.0f,
-		0.0f, 2.0f/(bottom - top), 0.0f, 0.0f,
-		(right + left)/(right - left), (bottom + top)/(bottom - top), 0.0f, -1.0f,
-		0.0f, 0.0f, near_clip, 0.0f
-	);
-}
 OpenVRDisplay::OpenVRDisplay(SDL_Window *window) : window(window) {
 	vr::EVRInitError error;
 	system = vr::VR_Init(&error, vr::VRApplication_Scene);
@@ -79,11 +60,11 @@ OpenVRDisplay::OpenVRDisplay(SDL_Window *window) : window(window) {
 
 	system->GetProjectionRaw(vr::Eye_Left, &left, &right, &top, &bottom);
 	matrices.projection_eyes[0] = mk_projection_mat(left, right, top, bottom, near_clip);
-	matrices.head_to_eyes[0]    = glm::inverse(m34_to_mat4(system->GetEyeToHeadTransform(vr::Eye_Left)));
+	matrices.head_to_eyes[0]    = glm::inverse(openvr_m34_to_mat4(system->GetEyeToHeadTransform(vr::Eye_Left)));
 
 	system->GetProjectionRaw(vr::Eye_Right, &left, &right, &top, &bottom);
 	matrices.projection_eyes[1] = mk_projection_mat(left, right, top, bottom, near_clip);
-	matrices.head_to_eyes[1] = glm::inverse(m34_to_mat4(system->GetEyeToHeadTransform(vr::Eye_Right)));
+	matrices.head_to_eyes[1] = glm::inverse(openvr_m34_to_mat4(system->GetEyeToHeadTransform(vr::Eye_Right)));
 }
 OpenVRDisplay::~OpenVRDisplay() {
 	for (int eye = 0; eye < 2; ++eye) {
@@ -101,7 +82,7 @@ void OpenVRDisplay::begin_frame() {
 
 	/* update device position matrix (device -> world, so we need to take inverse) */
 	/* TODO: maybe move into begin_frame */
-	matrices.absolute_to_device = glm::inverse(m34_to_mat4(tracked_device_poses[0].mDeviceToAbsoluteTracking));
+	matrices.absolute_to_device = glm::inverse(openvr_m34_to_mat4(tracked_device_poses[0].mDeviceToAbsoluteTracking));
 }
 
 size_t OpenVRDisplay::render_count() {
@@ -132,5 +113,24 @@ void OpenVRDisplay::display() {
 	vr_compositor->Submit(vr::Eye_Right, &right_eye, NULL, vr::Submit_Default);
 
 	glFlush();
+}
+glm::mat4 openvr_m34_to_mat4(const vr::HmdMatrix34_t &t) {
+	return glm::mat4(
+		t.m[0][0], t.m[1][0], t.m[2][0], 0.0f,
+		t.m[0][1], t.m[1][1], t.m[2][1], 0.0f,
+		t.m[0][2], t.m[1][2], t.m[2][2], 0.0f,
+		t.m[0][3], t.m[1][3], t.m[2][3], 1.0f
+	);
+}
+
+glm::mat4 mk_projection_mat(const float left, const float right,
+		const float top, const float bottom, const float near_clip)
+{
+	return glm::mat4(
+		2.0f/(right - left), 0.0f, 0.0f, 0.0f,
+		0.0f, 2.0f/(bottom - top), 0.0f, 0.0f,
+		(right + left)/(right - left), (bottom + top)/(bottom - top), 0.0f, -1.0f,
+		0.0f, 0.0f, near_clip, 0.0f
+	);
 }
 

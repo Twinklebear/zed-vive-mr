@@ -73,11 +73,13 @@ int main(int argc, char **argv) {
 	runtime_params.sensing_mode = sl::SENSING_MODE_FILL;
 #endif
 
-	std::unique_ptr<OpenVRDisplay> display = std::make_unique<OpenVRDisplay>(win);
+	std::unique_ptr<OpenVRDisplay> vr = std::make_unique<OpenVRDisplay>(win);
 
 	const std::string res_path = get_resource_path();
 	ObjModel controller(res_path + "controller.obj");
-	controller.set_model_mat(glm::scale(glm::vec3(4.f)));
+
+	auto right_hand_id = vr->system->GetTrackedDeviceIndexForControllerRole(vr::TrackedControllerRole_RightHand);
+	auto left_hand_id = vr->system->GetTrackedDeviceIndexForControllerRole(vr::TrackedControllerRole_LeftHand);
 
 	GLuint view_info_buf;
 	glGenBuffers(1, &view_info_buf);
@@ -85,30 +87,61 @@ int main(int argc, char **argv) {
 	glBindBufferBase(GL_UNIFORM_BUFFER, 0, view_info_buf);
 
 	glClearColor(0, 0, 0, 1);
+	glEnable(GL_DEPTH_TEST);
 
 	sl::Mat image;
 	bool quit = false;
 	while (!quit) {
-		SDL_Event e;
-		while (SDL_PollEvent(&e)){
-			if (e.type == SDL_QUIT || (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE)){
+		SDL_Event sdl_evt;
+		while (SDL_PollEvent(&sdl_evt)){
+			if (sdl_evt.type == SDL_QUIT
+					|| (sdl_evt.type == SDL_KEYDOWN && sdl_evt.key.keysym.sym == SDLK_ESCAPE))
+			{
 				quit = true;
 				break;
 			}
 		}
+		vr::VREvent_t vr_evt;
+		while (vr->system->PollNextEvent(&vr_evt, sizeof(vr_evt))) {
+			switch (vr_evt.eventType) {
+				case vr::VREvent_TrackedDeviceRoleChanged:
+					right_hand_id = vr->system->GetTrackedDeviceIndexForControllerRole(
+							vr::TrackedControllerRole_RightHand);
+					left_hand_id = vr->system->GetTrackedDeviceIndexForControllerRole(
+							vr::TrackedControllerRole_LeftHand);
+					break;
+			}
+		}
 
-		display->begin_frame();
-		for (size_t i = 0; i < display->render_count(); ++i){
+		glm::mat4 right_hand_pose, left_hand_pose;
+		if (right_hand_id != vr::k_unTrackedDeviceIndexInvalid) {
+			right_hand_pose = openvr_m34_to_mat4(
+					vr->tracked_device_poses[right_hand_id].mDeviceToAbsoluteTracking);
+		}
+		if (left_hand_id != vr::k_unTrackedDeviceIndexInvalid) {
+			left_hand_pose = openvr_m34_to_mat4(
+					vr->tracked_device_poses[left_hand_id].mDeviceToAbsoluteTracking);
+		}
+
+		vr->begin_frame();
+		for (size_t i = 0; i < vr->render_count(); ++i){
 			std::vector<glm::mat4> view_info(2, glm::mat4(1));
-			display->begin_render(i, view_info[0], view_info[1]);
+			vr->begin_render(i, view_info[0], view_info[1]);
 			glBindBuffer(GL_UNIFORM_BUFFER, view_info_buf);
 			glBufferData(GL_UNIFORM_BUFFER, view_info.size() * sizeof(glm::mat4),
 					view_info.data(), GL_STREAM_DRAW);
 
 			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-			controller.render();
+			if (right_hand_id != vr::k_unTrackedDeviceIndexInvalid) {
+				controller.set_model_mat(right_hand_pose);
+				controller.render();
+			}
+			if (left_hand_id != vr::k_unTrackedDeviceIndexInvalid) {
+				controller.set_model_mat(left_hand_pose);
+				controller.render();
+			}
 		}
-		display->display();
+		vr->display();
 
 		glViewport(0, 0, WIN_WIDTH, WIN_HEIGHT);
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -125,7 +158,7 @@ int main(int argc, char **argv) {
 	}
 
 	glDeleteBuffers(1, &view_info_buf);
-	display = nullptr;
+	vr = nullptr;
 //	zed.close();
 	SDL_GL_DeleteContext(ctx);
 	SDL_DestroyWindow(win);

@@ -40,4 +40,9 @@ public:
 	vr::IVRChaperone *vr_chaperone;
 };
 
+glm::mat4 openvr_m34_to_mat4(const vr::HmdMatrix34_t &t);
+
+glm::mat4 mk_projection_mat(const float left, const float right,
+		const float top, const float bottom, const float near_clip);
+
 #endif
