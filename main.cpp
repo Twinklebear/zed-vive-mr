@@ -78,6 +78,7 @@ int main(int argc, char **argv) {
 
 	const std::string res_path = get_resource_path();
 	ObjModel controller(res_path + "controller.obj");
+	ObjModel hmd_model(res_path + "generic_hmd.obj");
 
 	vr::TrackedDeviceIndex_t zed_controller = -1;
 	std::array<vr::TrackedDeviceIndex_t, 2> controllers = {
@@ -159,6 +160,10 @@ int main(int argc, char **argv) {
 
 		glViewport(0, 0, WIN_WIDTH, WIN_HEIGHT);
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		// Switch back from reversed z
+		glClipControl(GL_LOWER_LEFT, GL_NEGATIVE_ONE_TO_ONE);
+		glClearDepth(1.0f);
+		glDepthFunc(GL_LESS);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		// Render the virtual scene from the camera's viewpoint
@@ -172,10 +177,15 @@ int main(int argc, char **argv) {
 				* glm::rotate(glm::radians(2.951431f), glm::vec3(1.f, 0.f, 0.f))
 				* glm::rotate(glm::radians(2.932397f), glm::vec3(0.f, 1.f, 0.f))
 				* glm::rotate(glm::radians(1.664886f), glm::vec3(0.f, 0.f, 1.f));
-				* */
+				*/
 
+			/*
 			view_info[1] = glm::perspective(glm::radians(42.8344f),
 					static_cast<float>(WIN_WIDTH) / static_cast<float>(WIN_HEIGHT),
+					0.1f, 150.f);
+					*/
+			view_info[1] = glm::perspectiveFovRH(glm::radians(75.f),
+					static_cast<float>(WIN_WIDTH) , static_cast<float>(WIN_HEIGHT),
 					0.1f, 150.f);
 			glBindBuffer(GL_UNIFORM_BUFFER, view_info_buf);
 			glBufferData(GL_UNIFORM_BUFFER, view_info.size() * sizeof(glm::mat4),
@@ -187,6 +197,8 @@ int main(int argc, char **argv) {
 					controller.render();
 				}
 			}
+			hmd_model.set_model_mat(openvr_m34_to_mat4(vr->tracked_device_poses[0].mDeviceToAbsoluteTracking));
+			hmd_model.render();
 		}
 
 #if 0

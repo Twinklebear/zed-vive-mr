@@ -77,6 +77,10 @@ OpenVRDisplay::~OpenVRDisplay() {
 	vr::VR_Shutdown();
 }
 void OpenVRDisplay::begin_frame() {
+	glClipControl(GL_LOWER_LEFT, GL_ZERO_TO_ONE);
+	glClearDepth(0.0f);
+	glDepthFunc(GL_GREATER);
+
 	/* this is necessary for rendering to work properly (without it there is strange flicker) */
 	vr_compositor->WaitGetPoses(tracked_device_poses, vr::k_unMaxTrackedDeviceCount, NULL, 0);
 
