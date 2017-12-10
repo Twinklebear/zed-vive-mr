@@ -9,14 +9,6 @@ namespace dbg {
  * and ARB debug
  */
 void register_debug_callback();
- 
-/*
- * Callbacks for core debug output and debug_output_arb to be selected
- * depending on the context capabilities
- */
-void APIENTRY debug_callback(GLenum src, GLenum type, GLuint id, GLenum severity,
-	GLsizei len, const GLchar *msg, const GLvoid *user);
- 
 /*
  * Debug logging function called by our registered callbacks, simply
  * logs the debug messages to stdout

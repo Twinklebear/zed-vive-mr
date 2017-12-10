@@ -7,15 +7,16 @@
 
 using namespace dbg;
 
-void dbg::register_debug_callback(){
-	glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
-	glDebugMessageCallback(debug_callback, nullptr);
-	glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, NULL, GL_TRUE);
-}
-void APIENTRY dbg::debug_callback(GLenum src, GLenum type, GLuint id, GLenum severity,
+static void APIENTRY debug_callback(GLenum src, GLenum type, GLuint id, GLenum severity,
 	GLsizei len, const GLchar *msg, const GLvoid*)
 {
 	log_debug_msg(src, type, id, severity, len, msg);
+}
+void dbg::register_debug_callback(){
+	glEnable(GL_DEBUG_OUTPUT);
+	glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
+	glDebugMessageCallback(debug_callback, nullptr);
+	glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, NULL, GL_TRUE);
 }
 void dbg::log_debug_msg(GLenum src, GLenum type, GLuint, GLenum severity, GLsizei tag, const GLchar *msg){
 	//Print a time stamp for the message
