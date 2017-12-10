@@ -35,11 +35,16 @@ ObjModel::ObjModel(const std::string &file) {
 	glGenVertexArrays(1, &vao);
 
 	const std::string res_path = get_resource_path();
-	shader = load_program({
+	vr_shader = load_program({
 		std::make_pair(GL_VERTEX_SHADER, res_path + "obj_model_vert.glsl"),
 		std::make_pair(GL_FRAGMENT_SHADER, res_path + "obj_model_frag.glsl")
 	});
-	model_mat_unif = glGetUniformLocation(shader, "model_mat");
+	mr_shader = load_program({
+		std::make_pair(GL_VERTEX_SHADER, res_path + "obj_model_vert.glsl"),
+		std::make_pair(GL_FRAGMENT_SHADER, res_path + "mr_obj_model_frag.glsl")
+	});
+	vr_model_mat_unif = glGetUniformLocation(vr_shader, "model_mat");
+	mr_model_mat_unif = glGetUniformLocation(mr_shader, "model_mat");
 
 	tinyobj::attrib_t attrib;
 	std::vector<tinyobj::shape_t> shapes;
@@ -85,16 +90,25 @@ ObjModel::ObjModel(const std::string &file) {
 	}
 }
 ObjModel::~ObjModel() {
-	glDeleteProgram(shader);
+	glDeleteProgram(vr_shader);
+	glDeleteProgram(mr_shader);
 	glDeleteVertexArrays(1, &vao);
 }
 void ObjModel::set_model_mat(const glm::mat4 &mat) {
 	model_mat = mat;
 }
+void ObjModel::render_vr() const {
+	glUseProgram(vr_shader);
+	glUniformMatrix4fv(vr_model_mat_unif, 1, GL_FALSE, glm::value_ptr(model_mat));
+	render();
+}
+void ObjModel::render_mr() const {
+	glUseProgram(mr_shader);
+	glUniformMatrix4fv(mr_model_mat_unif, 1, GL_FALSE, glm::value_ptr(model_mat));
+	render();
+}
 void ObjModel::render() const {
-	glUseProgram(shader);
 	glBindVertexArray(vao);
-	glUniformMatrix4fv(model_mat_unif, 1, GL_FALSE, glm::value_ptr(model_mat));
 	for (const auto &m : models) {
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m.ebo);
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m.verts_buf);

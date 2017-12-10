@@ -76,6 +76,8 @@ void dbg::log_debug_msg(GLenum src, GLenum type, GLuint, GLenum severity, GLsize
 	std::cout << " Tag: " << tag;
 	std::cout << ":\n\t" << msg << std::endl;
 	// Break for a stack trace of sorts
-	assert(severity != GL_DEBUG_SEVERITY_HIGH && type != GL_DEBUG_TYPE_ERROR);
+	if (severity == GL_DEBUG_SEVERITY_HIGH && type == GL_DEBUG_TYPE_ERROR) {
+		throw std::runtime_error("Severe OpenGL Error!");
+	}
 }
 
