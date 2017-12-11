@@ -6,20 +6,23 @@ uniform mat4 model_mat;
 
 struct Vertex {
 	float px, py, pz;
-	float nx, ny, nz;
+	int color;
 };
 
 layout(binding = 1, std430) buffer VertexBlock {
 	Vertex vertices[];
 };
 
-out vec3 vnormal;
-out vec3 proj_pos;
+out vec4 vcolor;
 
 void main(void) {
 	Vertex vert = vertices[gl_VertexID];
 	gl_Position = proj * view * model_mat * vec4(vert.px, vert.py, vert.pz, 1.0);
-	proj_pos = gl_Position.xyz / gl_Position.w;
-	vnormal = vec3(vert.ny, vert.nx, vert.nz);
+	vcolor.b = ((vert.color & 0x00ff0000) >> 16) / 255.0;
+	vcolor.g = ((vert.color & 0x0000ff00) >> 8) / 255.0;
+	vcolor.r = ((vert.color & 0x000000ff) >> 0) / 255.0;
+	vcolor.rgb = srgb_to_linear(vcolor.rgb);
+	vcolor.a = 1;
 }
+
 

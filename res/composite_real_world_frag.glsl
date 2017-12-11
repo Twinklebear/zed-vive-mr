@@ -15,6 +15,7 @@ void main(void) {
 	if (isinf(depth) || isnan(depth)) {
 		discard;
 	}
-	color = texture(cam_color, uv);
+	color.rgb = srgb_to_linear(texture(cam_color, uv).rgb);
+	color.a = 1;
 }
 

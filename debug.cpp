@@ -19,7 +19,12 @@ void dbg::register_debug_callback(){
 	glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, NULL, GL_TRUE);
 }
 void dbg::log_debug_msg(GLenum src, GLenum type, GLuint, GLenum severity, GLsizei tag, const GLchar *msg){
-	//Print a time stamp for the message
+	if (severity == GL_DEBUG_SEVERITY_NOTIFICATION && src == GL_DEBUG_SOURCE_API
+			&& type == GL_DEBUG_TYPE_OTHER)
+	{
+		return;
+	}
+	// Print a time stamp for the message
 	float sec = SDL_GetTicks() / 1000.f;
 	int min = static_cast<int>(sec / 60.f);
 	sec -= sec / 60.f;
@@ -34,6 +39,12 @@ void dbg::log_debug_msg(GLenum src, GLenum type, GLuint, GLenum severity, GLsize
 		break;
 	case GL_DEBUG_SEVERITY_LOW:
 		std::cout << " Low severity";
+		break;
+	case GL_DEBUG_SEVERITY_NOTIFICATION:
+		std::cout << " Notification";
+		break;
+	default:
+		break;
 	}
 	switch (src){
 	case GL_DEBUG_SOURCE_API:
@@ -53,6 +64,7 @@ void dbg::log_debug_msg(GLenum src, GLenum type, GLuint, GLenum severity, GLsize
 		break;
 	default:
 		std::cout << " Other";
+		break;
 	}
 	switch (type){
 	case GL_DEBUG_TYPE_ERROR:
@@ -72,6 +84,7 @@ void dbg::log_debug_msg(GLenum src, GLenum type, GLuint, GLenum severity, GLsize
 		break;
 	default:
 		std::cout << " Other";
+		break;
 	}
 	std::cout << " Tag: " << tag;
 	std::cout << ":\n\t" << msg << std::endl;

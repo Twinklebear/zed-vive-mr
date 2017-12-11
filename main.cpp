@@ -13,6 +13,8 @@
 #include "openvr_display.h"
 #include "util.h"
 #include "obj_model.h"
+#include "zed_point_cloud.h"
+#include "imgui-1.52/imgui_impl_sdl_gl3.h"
 
 static int WIN_WIDTH = 1280;
 static int WIN_HEIGHT = 720;
@@ -33,8 +35,9 @@ int main(int argc, char **argv) {
 	sl::InitParameters init_params;
 	//init_params.camera_resolution = sl::RESOLUTION_HD1080;
 	init_params.camera_resolution = sl::RESOLUTION_HD720;
-	init_params.camera_fps = 30;
+	init_params.camera_fps = 60;
 	init_params.coordinate_system = sl::COORDINATE_SYSTEM_RIGHT_HANDED_Y_UP;
+	init_params.depth_mode = sl::DEPTH_MODE_PERFORMANCE;
 	init_params.sdk_verbose = false;
 	init_params.coordinate_units = sl::UNIT_METER;
 
@@ -74,6 +77,8 @@ int main(int argc, char **argv) {
 		return 1;
 	}
 
+	ImGui_ImplSdlGL3_Init(win);
+
 	dbg::register_debug_callback();
 	glDebugMessageInsert(GL_DEBUG_SOURCE_APPLICATION, GL_DEBUG_TYPE_MARKER,
 			0, GL_DEBUG_SEVERITY_NOTIFICATION, 16, "DEBUG LOG START");
@@ -88,7 +93,7 @@ int main(int argc, char **argv) {
 		<< " degrees\n";
 
 	sl::RuntimeParameters runtime_params;
-	runtime_params.sensing_mode = sl::SENSING_MODE_FILL;
+	//runtime_params.sensing_mode = sl::SENSING_MODE_FILL;
 
 	std::unique_ptr<OpenVRDisplay> vr = std::make_unique<OpenVRDisplay>(win);
 
@@ -96,6 +101,10 @@ int main(int argc, char **argv) {
 	ObjModel controller(res_path + "controller.obj");
 	ObjModel hmd_model(res_path + "generic_hmd.obj");
 	ObjModel suzanne(res_path + "suzanne.obj");
+	ObjModel uv_sphere(res_path + "uv_sphere.obj");
+	uv_sphere.set_model_mat(glm::translate(glm::vec3(0.f, 1.5f, 1.f)) * glm::scale(glm::vec3(0.25f)));
+
+	PointCloud point_cloud;
 
 	GLuint draw_camera_view = load_program({
 		std::make_pair(GL_VERTEX_SHADER, res_path + "fullscreen_quad_vert.glsl"),
@@ -134,11 +143,37 @@ int main(int argc, char **argv) {
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
 
 	glBindTexture(GL_TEXTURE_2D, zed_depth_tex);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
 
+#if 0
+	const glm::mat4 swap_handedness = glm::mat4(
+		glm::vec4(-1, 0, 0, 0),
+		glm::vec4(0, 1, 0, 0),
+		glm::vec4(0, 0, -1, 0),
+		glm::vec4(0, 0, 0, 1)
+	);
+
+	glm::vec3 calibration_translation = glm::vec3(0.03219505f, -0.06622181f, -0.06298007f);
+	glm::vec3 calibration_rotation(4.360163f, 2.970286f, 5.116453);
+
+	// TODO: Parse the ZED offset calibration file for the translation, rotation
+	// and FOV info
+	glm::mat4 camera_offset = glm::translate(calibration_translation)
+		* glm::rotate(glm::radians(calibration_rotation.y), glm::vec3(0.f, 1.f, 0.f))
+		* glm::rotate(glm::radians(calibration_rotation.x), glm::vec3(1.f, 0.f, 0.f))
+		* glm::rotate(glm::radians(calibration_rotation.z), glm::vec3(0.f, 0.f, 1.f));
+	camera_offset = swap_handedness * camera_offset * swap_handedness;
+#else
+	glm::vec3 calibration_translation(0.0, 0.0, 0.0);
+	glm::vec3 calibration_rotation(0.0, 0.0, 0.0);
+	glm::mat4 camera_offset = glm::translate(calibration_translation)
+		* glm::rotate(glm::radians(calibration_rotation.y), glm::vec3(0.f, 1.f, 0.f))
+		* glm::rotate(glm::radians(calibration_rotation.x), glm::vec3(1.f, 0.f, 0.f))
+		* glm::rotate(glm::radians(calibration_rotation.z), glm::vec3(0.f, 0.f, 1.f));
+#endif
 
 	bool quit = false;
 	while (!quit) {
@@ -150,6 +185,7 @@ int main(int argc, char **argv) {
 				quit = true;
 				break;
 			}
+			ImGui_ImplSdlGL3_ProcessEvent(&sdl_evt);
 		}
 		vr::VREvent_t vr_evt;
 		while (vr->system->PollNextEvent(&vr_evt, sizeof(vr_evt))) {
@@ -205,6 +241,8 @@ int main(int argc, char **argv) {
 				suzanne.set_model_mat(controller_poses[user_controller]);
 				suzanne.render_vr();
 			}
+			uv_sphere.render_vr();
+			point_cloud.render();
 		}
 		vr->display();
 
@@ -215,10 +253,11 @@ int main(int argc, char **argv) {
 		glClearDepth(1.0f);
 		glDepthFunc(GL_LESS);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		ImGui_ImplSdlGL3_NewFrame(win);
 
 		// Render the virtual scene from the camera's viewpoint
 		if (zed_controller != vr::k_unTrackedDeviceIndexInvalid
-				&& controllers[zed_controller] != vr::k_unTrackedDeviceIndexInvalid)
+			&& controllers[zed_controller] != vr::k_unTrackedDeviceIndexInvalid)
 		{
 #if 1
 			glActiveTexture(GL_TEXTURE0);
@@ -229,6 +268,9 @@ int main(int argc, char **argv) {
 			if (zed.grab(runtime_params) == sl::SUCCESS) {
 				zed.retrieveImage(zed_img, sl::VIEW_LEFT);
 				zed.retrieveMeasure(zed_depth_map, sl::MEASURE_DEPTH);
+				sl::Mat points;
+				zed.retrieveMeasure(points, sl::MEASURE_XYZRGBA);
+				point_cloud.update_point_cloud(points);
 
 				glActiveTexture(GL_TEXTURE0);
 				glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, zed_img.getWidth(), zed_img.getHeight(),
@@ -246,14 +288,20 @@ int main(int argc, char **argv) {
 			glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 			glDepthMask(GL_TRUE);
 
-			// TODO: Parse the ZED offset calibration file for the translation, rotation
-			// and FOV info
-			glm::mat4 camera_offset = glm::translate(glm::vec3(-0.2166734f, -0.1612207f, 0.008288212f))
-				* glm::mat4(glm::quat(glm::vec3(glm::radians(357.9935f), glm::radians(5.753352f),
-								glm::radians(359.645f))));
-			view_info.view = glm::inverse(controller_poses[zed_controller] * camera_offset);
+			camera_offset = glm::translate(calibration_translation)
+				* glm::rotate(glm::radians(calibration_rotation.y), glm::vec3(0.f, 1.f, 0.f))
+				* glm::rotate(glm::radians(calibration_rotation.x), glm::vec3(1.f, 0.f, 0.f))
+				* glm::rotate(glm::radians(calibration_rotation.z), glm::vec3(0.f, 0.f, 1.f));
+
+			view_info.view = glm::inverse(camera_offset * controller_poses[zed_controller]);
 			view_info.eye_pos = glm::column(view_info.view, 3);
 
+			point_cloud.set_model_mat(glm::inverse(view_info.view));
+
+			/*
+			view_info.proj = glm::perspective(glm::radians(42.83768f),
+					static_cast<float>(WIN_WIDTH) / WIN_HEIGHT, 0.7f, 20.f);
+					*/
 			view_info.proj = zed_projection_matrix(zed);
 			glBindBuffer(GL_UNIFORM_BUFFER, view_info_buf);
 			glBufferData(GL_UNIFORM_BUFFER, sizeof(ViewInfo), &view_info,
@@ -271,10 +319,29 @@ int main(int argc, char **argv) {
 			}
 			hmd_model.set_model_mat(openvr_m34_to_mat4(vr->tracked_device_poses[0].mDeviceToAbsoluteTracking));
 			hmd_model.render_mr();
+			uv_sphere.render_mr();
 		}
+
+		if (ImGui::Begin("Calibration Settings")) {
+			ImGui::InputFloat("t.x", &calibration_translation.x, 0.001);
+			ImGui::InputFloat("t.y", &calibration_translation.y, 0.001);
+			ImGui::InputFloat("t.z", &calibration_translation.z, 0.001);
+			ImGui::InputFloat("r.x", &calibration_rotation.x, 0.01);
+			ImGui::InputFloat("r.y", &calibration_rotation.y, 0.01);
+			ImGui::InputFloat("r.z", &calibration_rotation.z, 0.01);
+		}
+		ImGui::End();
+		glDisable(GL_FRAMEBUFFER_SRGB);
+		ImGui::Render();
+		glEnable(GL_FRAMEBUFFER_SRGB);
+
 		SDL_GL_SwapWindow(win);
 	}
 
+	std::cout << "Calibration:\nTranslation = " << glm::to_string(calibration_translation)
+		<< "\nRotation XYZ = " << glm::to_string(calibration_rotation) << std::endl;
+
+	ImGui_ImplSdlGL3_Shutdown();
 	glDeleteBuffers(1, &view_info_buf);
 	vr = nullptr;
 	zed.close();
