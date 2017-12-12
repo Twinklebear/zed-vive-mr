@@ -30,8 +30,14 @@ glm::mat4 zed_projection_matrix(sl::Camera &zed);
 std::string zed_error_to_string(const sl::ERROR_CODE &err);
 
 int main(int argc, char **argv) {
-	sl::Camera zed;
+	bool calibrating = false;
+	for (int i = 1; i < argc; ++i) {
+		if (std::strcmp(argv[i], "--calibrate") == 0) {
+			calibrating = true;
+		}
+	}
 
+	sl::Camera zed;
 	sl::InitParameters init_params;
 	//init_params.camera_resolution = sl::RESOLUTION_HD1080;
 	init_params.camera_resolution = sl::RESOLUTION_HD720;
@@ -93,7 +99,9 @@ int main(int argc, char **argv) {
 		<< " degrees\n";
 
 	sl::RuntimeParameters runtime_params;
-	//runtime_params.sensing_mode = sl::SENSING_MODE_FILL;
+	if (!calibrating) {
+		runtime_params.sensing_mode = sl::SENSING_MODE_FILL;
+	}
 
 	std::unique_ptr<OpenVRDisplay> vr = std::make_unique<OpenVRDisplay>(win);
 
@@ -185,25 +193,32 @@ int main(int argc, char **argv) {
 		glm::vec4(0, 0, 0, 1)
 	);
 
-	glm::vec3 calibration_translation = glm::vec3(0.03219505f, -0.06622181f, -0.06298007f);
-	glm::vec3 calibration_rotation(4.360163f, 2.970286f, 5.116453);
-
-	// TODO: Parse the ZED offset calibration file for the translation, rotation
-	// and FOV info
+	glm::vec3 calibration_translation = glm::vec3(-0.089805, 0.007778, -0.024980);
+	glm::vec3 calibration_rotation = glm::vec3(0.460165, 1.300000, 1.316456);
 	glm::mat4 camera_offset = glm::translate(calibration_translation)
 		* glm::rotate(glm::radians(calibration_rotation.y), glm::vec3(0.f, 1.f, 0.f))
 		* glm::rotate(glm::radians(calibration_rotation.x), glm::vec3(1.f, 0.f, 0.f))
 		* glm::rotate(glm::radians(calibration_rotation.z), glm::vec3(0.f, 0.f, 1.f));
 	camera_offset = swap_handedness * camera_offset * swap_handedness;
 #else
-	glm::vec3 calibration_translation(0.0, 0.0, 0.0);
-	glm::vec3 calibration_rotation(0.0, 0.0, 0.0);
+	glm::vec3 calibration_translation = glm::vec3(0.088805, -0.005222, 0.020980);
+	glm::vec3 calibration_rotation = glm::vec3(-1.560165, 1.800000, -0.616456);
 	glm::mat4 camera_offset = glm::translate(calibration_translation)
 		* glm::rotate(glm::radians(calibration_rotation.y), glm::vec3(0.f, 1.f, 0.f))
 		* glm::rotate(glm::radians(calibration_rotation.x), glm::vec3(1.f, 0.f, 0.f))
 		* glm::rotate(glm::radians(calibration_rotation.z), glm::vec3(0.f, 0.f, 1.f));
 #endif
 
+	size_t vr_selected_calibration_input = 0;
+	std::array<float*, 6> calibration_inputs = {
+		&calibration_translation.x, &calibration_translation.y, &calibration_translation.z,
+		&calibration_rotation.x, &calibration_rotation.y, &calibration_rotation.z,
+	};
+	const std::array<float, 2> calibration_ui_steps = { 0.001, 0.1 };
+	const std::array<std::string, 6> calibration_ui_labels = {
+		"t.x", "t.y", "t.z", "r.x", "r.y", "r.z"
+	};
+	glm::vec2 press_pos;
 	bool quit = false;
 	while (!quit) {
 		SDL_Event sdl_evt;
@@ -238,10 +253,45 @@ int main(int argc, char **argv) {
 						std::cout << "ZED camera is tracked by controller "
 							<< zed_controller << "\n";
 					}
+					if (user_controller != -1 && vr_evt.trackedDeviceIndex == controllers[user_controller]) {
+						if (vr_evt.data.controller.button == vr::k_EButton_SteamVR_Touchpad) {
+							vr::VRControllerState_t state;
+							vr->system->GetControllerState(vr_evt.trackedDeviceIndex, &state, sizeof(state));
+							// Axis 0 is the touchpad thumb press location
+							press_pos = glm::vec2(state.rAxis[0].x, state.rAxis[0].y);
+							if (glm::length(press_pos) <= 0.15) {
+								*calibration_inputs[vr_selected_calibration_input] = 0;
+							} else if (press_pos.y <= -0.8) {
+								vr_selected_calibration_input = (vr_selected_calibration_input + 1) % 6;
+							} else if (press_pos.y >= 0.8) {
+								if (vr_selected_calibration_input == 0) {
+									vr_selected_calibration_input = 5;
+								} else {
+									vr_selected_calibration_input = (vr_selected_calibration_input - 1) % 6;
+								}
+							}
+						}
+					}
+					break;
+				case vr::VREvent_ButtonUnpress:
+					if (user_controller != -1 && vr_evt.trackedDeviceIndex == controllers[user_controller]) {
+						if (vr_evt.data.controller.button == vr::k_EButton_SteamVR_Touchpad) {
+							press_pos = glm::vec2(0);
+						}
+					}
 					break;
 				default:
 					break;
 			}
+		}
+
+		// Clicking on the right, left, top, bottoms of the touchpad
+		if (press_pos.x >= 0.8) {
+			*calibration_inputs[vr_selected_calibration_input]
+				+= calibration_ui_steps[vr_selected_calibration_input / 3];
+		} else if (press_pos.x <= -0.8) {
+			*calibration_inputs[vr_selected_calibration_input]
+				-= calibration_ui_steps[vr_selected_calibration_input / 3];
 		}
 
 		glActiveTexture(GL_TEXTURE0);
@@ -255,12 +305,16 @@ int main(int argc, char **argv) {
 		io.DisplaySize = ImVec2(IMGUI_TEX_DIMS, IMGUI_TEX_DIMS);
 		io.DisplayFramebufferScale = ImVec2(1, 1);
 		if (ImGui::Begin("Calibration Settings")) {
-			ImGui::InputFloat("t.x", &calibration_translation.x, 0.001);
-			ImGui::InputFloat("t.y", &calibration_translation.y, 0.001);
-			ImGui::InputFloat("t.z", &calibration_translation.z, 0.001);
-			ImGui::InputFloat("r.x", &calibration_rotation.x, 0.01);
-			ImGui::InputFloat("r.y", &calibration_rotation.y, 0.01);
-			ImGui::InputFloat("r.z", &calibration_rotation.z, 0.01);
+			for (size_t i = 0; i < calibration_inputs.size(); ++i) {
+				if (i == vr_selected_calibration_input) {
+					ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.8, 0.2, 0.2, 1.0));
+				}
+				ImGui::InputFloat(calibration_ui_labels[i].c_str(),
+						calibration_inputs[i], calibration_ui_steps[i / 3]);
+				if (i == vr_selected_calibration_input) {
+					ImGui::PopStyleColor();
+				}
+			}
 		}
 		ImGui::End();
 		glDisable(GL_FRAMEBUFFER_SRGB);
@@ -295,7 +349,27 @@ int main(int argc, char **argv) {
 				suzanne.render_vr();
 			}
 			uv_sphere.render_vr();
-			point_cloud.render();
+
+			if (calibrating) {
+				point_cloud.render();
+
+				if (user_controller != -1 && controllers[user_controller] != vr::k_unTrackedDeviceIndexInvalid) {
+					glDisable(GL_FRAMEBUFFER_SRGB);
+					glActiveTexture(GL_TEXTURE0);
+					glBindTexture(GL_TEXTURE_2D, imgui_tex);
+					glUseProgram(imgui_panel_shader);
+					const glm::mat4 imgui_mat = controller_poses[user_controller]
+						* glm::translate(glm::vec3(-0.05f, 0.0f, 0.32f))
+						* glm::rotate(glm::radians(-90.f), glm::vec3(1.f, 0.f, 0.f))
+						* glm::scale(glm::vec3(0.3, 0.3, 1.f));
+					glUniform1i(imgui_is_blit_unif, 0);
+					glUniformMatrix4fv(imgui_model_mat_unif, 1, GL_FALSE, glm::value_ptr(imgui_mat));
+					glDisable(GL_DEPTH_TEST);
+					glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+					glEnable(GL_DEPTH_TEST);
+					glEnable(GL_FRAMEBUFFER_SRGB);
+				}
+			}
 		}
 		vr->display();
 
@@ -311,7 +385,6 @@ int main(int argc, char **argv) {
 		if (zed_controller != vr::k_unTrackedDeviceIndexInvalid
 			&& controllers[zed_controller] != vr::k_unTrackedDeviceIndexInvalid)
 		{
-#if 1
 			glActiveTexture(GL_TEXTURE0);
 			glBindTexture(GL_TEXTURE_2D, zed_img_tex);
 			glActiveTexture(GL_TEXTURE1);
@@ -320,10 +393,6 @@ int main(int argc, char **argv) {
 			if (zed.grab(runtime_params) == sl::SUCCESS) {
 				zed.retrieveImage(zed_img, sl::VIEW_LEFT);
 				zed.retrieveMeasure(zed_depth_map, sl::MEASURE_DEPTH);
-				sl::Mat points;
-				zed.retrieveMeasure(points, sl::MEASURE_XYZRGBA);
-				point_cloud.update_point_cloud(points);
-
 				glActiveTexture(GL_TEXTURE0);
 				glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, zed_img.getWidth(), zed_img.getHeight(),
 						0, GL_BGRA, GL_UNSIGNED_BYTE, zed_img.getPtr<uint8_t>());
@@ -331,8 +400,13 @@ int main(int argc, char **argv) {
 				glActiveTexture(GL_TEXTURE1);
 				glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, zed_depth_map.getWidth(), zed_depth_map.getHeight(),
 						0, GL_RED, GL_FLOAT, zed_depth_map.getPtr<float>());
+
+				if (calibrating) {
+					sl::Mat points;
+					zed.retrieveMeasure(points, sl::MEASURE_XYZRGBA);
+					point_cloud.update_point_cloud(points);
+				}
 			}
-#endif
 
 			glBindVertexArray(dummy_vao);
 			glUseProgram(draw_camera_view);
@@ -345,16 +419,12 @@ int main(int argc, char **argv) {
 				* glm::rotate(glm::radians(calibration_rotation.x), glm::vec3(1.f, 0.f, 0.f))
 				* glm::rotate(glm::radians(calibration_rotation.z), glm::vec3(0.f, 0.f, 1.f));
 
-			view_info.view = glm::inverse(camera_offset * controller_poses[zed_controller]);
+			view_info.view = glm::inverse(glm::inverse(camera_offset) * controller_poses[zed_controller]);
 			view_info.eye_pos = glm::column(view_info.view, 3);
 
 			point_cloud.set_model_mat(glm::inverse(view_info.view));
-
-			/*
-			view_info.proj = glm::perspective(glm::radians(42.83768f),
-					static_cast<float>(WIN_WIDTH) / WIN_HEIGHT, 0.7f, 20.f);
-					*/
 			view_info.proj = zed_projection_matrix(zed);
+
 			glBindBuffer(GL_UNIFORM_BUFFER, view_info_buf);
 			glBufferData(GL_UNIFORM_BUFFER, sizeof(ViewInfo), &view_info,
 					GL_STREAM_DRAW);
