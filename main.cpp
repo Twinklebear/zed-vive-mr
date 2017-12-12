@@ -128,8 +128,11 @@ int main(int argc, char **argv) {
 	glBindBuffer(GL_UNIFORM_BUFFER, view_info_buf);
 	glBindBufferBase(GL_UNIFORM_BUFFER, 0, view_info_buf);
 
-	glClearColor(0, 0, 0, 1);
+	glClearColor(0, 0, 0, 0);
 	glEnable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendEquation(GL_FUNC_ADD);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
 	sl::Mat zed_img, zed_depth_map;
 	GLuint zed_img_tex, zed_depth_tex;
@@ -147,6 +150,32 @@ int main(int argc, char **argv) {
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+
+	const int IMGUI_TEX_DIMS = 512;
+	GLuint imgui_fbo, imgui_tex;
+	glGenTextures(1, &imgui_tex);
+	glBindTexture(GL_TEXTURE_2D, imgui_tex);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+	glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA8, IMGUI_TEX_DIMS, IMGUI_TEX_DIMS);
+
+	glGenFramebuffers(1, &imgui_fbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, imgui_fbo);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, imgui_tex, 0);
+	GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glBindTexture(GL_TEXTURE_2D, 0);
+
+	GLuint imgui_panel_shader = load_program({
+		std::make_pair(GL_VERTEX_SHADER, res_path + "imgui_panel_vert.glsl"),
+		std::make_pair(GL_FRAGMENT_SHADER, res_path + "imgui_panel_frag.glsl")
+	});
+	GLuint imgui_model_mat_unif = glGetUniformLocation(imgui_panel_shader, "model_mat");
+	GLuint imgui_is_blit_unif = glGetUniformLocation(imgui_panel_shader, "is_blit");
+	glUseProgram(imgui_panel_shader);
+	glUniform1i(imgui_is_blit_unif, 0);
 
 #if 0
 	const glm::mat4 swap_handedness = glm::mat4(
@@ -215,6 +244,30 @@ int main(int argc, char **argv) {
 			}
 		}
 
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, 0);
+		glBindFramebuffer(GL_FRAMEBUFFER, imgui_fbo);
+		glClear(GL_COLOR_BUFFER_BIT);
+		// Render UI to a texture we can show in VR as well
+		ImGui_ImplSdlGL3_NewFrame(win);
+		ImGuiIO &io = ImGui::GetIO();
+		// Hack to render to a smaller ui texture panel
+		io.DisplaySize = ImVec2(IMGUI_TEX_DIMS, IMGUI_TEX_DIMS);
+		io.DisplayFramebufferScale = ImVec2(1, 1);
+		if (ImGui::Begin("Calibration Settings")) {
+			ImGui::InputFloat("t.x", &calibration_translation.x, 0.001);
+			ImGui::InputFloat("t.y", &calibration_translation.y, 0.001);
+			ImGui::InputFloat("t.z", &calibration_translation.z, 0.001);
+			ImGui::InputFloat("r.x", &calibration_rotation.x, 0.01);
+			ImGui::InputFloat("r.y", &calibration_rotation.y, 0.01);
+			ImGui::InputFloat("r.z", &calibration_rotation.z, 0.01);
+		}
+		ImGui::End();
+		glDisable(GL_FRAMEBUFFER_SRGB);
+		ImGui::Render();
+		glEnable(GL_FRAMEBUFFER_SRGB);
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
 		std::array<glm::mat4, 2> controller_poses;
 		for (size_t i = 0; i < controllers.size(); ++i) {
 			if (controllers[i] != vr::k_unTrackedDeviceIndexInvalid) {
@@ -253,7 +306,6 @@ int main(int argc, char **argv) {
 		glClearDepth(1.0f);
 		glDepthFunc(GL_LESS);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-		ImGui_ImplSdlGL3_NewFrame(win);
 
 		// Render the virtual scene from the camera's viewpoint
 		if (zed_controller != vr::k_unTrackedDeviceIndexInvalid
@@ -322,17 +374,17 @@ int main(int argc, char **argv) {
 			uv_sphere.render_mr();
 		}
 
-		if (ImGui::Begin("Calibration Settings")) {
-			ImGui::InputFloat("t.x", &calibration_translation.x, 0.001);
-			ImGui::InputFloat("t.y", &calibration_translation.y, 0.001);
-			ImGui::InputFloat("t.z", &calibration_translation.z, 0.001);
-			ImGui::InputFloat("r.x", &calibration_rotation.x, 0.01);
-			ImGui::InputFloat("r.y", &calibration_rotation.y, 0.01);
-			ImGui::InputFloat("r.z", &calibration_rotation.z, 0.01);
-		}
-		ImGui::End();
 		glDisable(GL_FRAMEBUFFER_SRGB);
-		ImGui::Render();
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, imgui_tex);
+		glUseProgram(imgui_panel_shader);
+		glm::mat4 imgui_blit_mat = glm::translate(glm::vec3(-0.6, 0.288888f, 0.f))
+			* glm::scale(glm::vec3(0.5625f * 0.711, 0.711f, 1.f));
+		glUniform1i(imgui_is_blit_unif, 1);
+		glUniformMatrix4fv(imgui_model_mat_unif, 1, GL_FALSE, glm::value_ptr(imgui_blit_mat));
+		glDisable(GL_DEPTH_TEST);
+		glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+		glEnable(GL_DEPTH_TEST);
 		glEnable(GL_FRAMEBUFFER_SRGB);
 
 		SDL_GL_SwapWindow(win);

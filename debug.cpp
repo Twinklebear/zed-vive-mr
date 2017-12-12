@@ -24,6 +24,10 @@ void dbg::log_debug_msg(GLenum src, GLenum type, GLuint, GLenum severity, GLsize
 	{
 		return;
 	}
+	// My texture is correct, shut the fuck up nvidia.
+	if (tag == 86) {
+		return;
+	}
 	// Print a time stamp for the message
 	float sec = SDL_GetTicks() / 1000.f;
 	int min = static_cast<int>(sec / 60.f);
