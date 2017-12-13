@@ -25,6 +25,8 @@ class OpenVRDisplay {
 public:
 	OpenVRDisplay(SDL_Window *window);
 	~OpenVRDisplay();
+	OpenVRDisplay(const OpenVRDisplay&) = delete;
+	OpenVRDisplay& operator=(const OpenVRDisplay&) = delete;
 	void begin_frame();
 	size_t render_count();
 	void begin_render(const size_t iteration, glm::mat4 &view, glm::mat4 &projection);
