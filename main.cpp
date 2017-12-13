@@ -344,14 +344,14 @@ int main(int argc, char **argv) {
 			for (size_t i = 0; i < controllers.size(); ++i) {
 				if (controllers[i] != vr::k_unTrackedDeviceIndexInvalid) {
 					controller.set_model_mat(controller_poses[i]);
-					controller.render_vr();
+					controller.render();
 				}
 			}
 			if (user_controller != -1 && controllers[user_controller] != vr::k_unTrackedDeviceIndexInvalid) {
 				suzanne.set_model_mat(controller_poses[user_controller]);
-				suzanne.render_vr();
+				suzanne.render();
 			}
-			uv_sphere.render_vr();
+			uv_sphere.render();
 
 			if (calibrating) {
 				point_cloud.render();
@@ -411,12 +411,6 @@ int main(int argc, char **argv) {
 				}
 			}
 
-			glBindVertexArray(dummy_vao);
-			glUseProgram(draw_camera_view);
-			glDepthMask(GL_FALSE);
-			glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-			glDepthMask(GL_TRUE);
-
 			camera_offset = glm::translate(calibration_translation)
 				* glm::rotate(glm::radians(calibration_rotation.y), glm::vec3(0.f, 1.f, 0.f))
 				* glm::rotate(glm::radians(calibration_rotation.x), glm::vec3(1.f, 0.f, 0.f))
@@ -432,19 +426,20 @@ int main(int argc, char **argv) {
 			glBufferData(GL_UNIFORM_BUFFER, sizeof(ViewInfo), &view_info,
 					GL_STREAM_DRAW);
 
-			for (size_t i = 0; i < controllers.size(); ++i) {
-				if (controllers[i] != vr::k_unTrackedDeviceIndexInvalid) {
-					controller.set_model_mat(controller_poses[i]);
-					controller.render_mr();
-				}
-			}
+			glBindVertexArray(dummy_vao);
+			glUseProgram(draw_camera_view);
+			glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+
 			if (user_controller != -1 && controllers[user_controller] != vr::k_unTrackedDeviceIndexInvalid) {
+				controller.set_model_mat(controller_poses[user_controller]);
+				controller.render();
+
 				suzanne.set_model_mat(controller_poses[user_controller]);
-				suzanne.render_mr();
+				suzanne.render();
 			}
 			hmd_model.set_model_mat(openvr_m34_to_mat4(vr->tracked_device_poses[0].mDeviceToAbsoluteTracking));
-			hmd_model.render_mr();
-			uv_sphere.render_mr();
+			hmd_model.render();
+			uv_sphere.render();
 		}
 
 		glDisable(GL_FRAMEBUFFER_SRGB);
