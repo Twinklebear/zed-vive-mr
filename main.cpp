@@ -1,4 +1,5 @@
 #include <iostream>
+#include <fstream>
 #include <algorithm>
 #include <array>
 #include <memory>
@@ -416,6 +417,8 @@ int main(int argc, char **argv) {
 				* glm::rotate(glm::radians(calibration_rotation.x), glm::vec3(1.f, 0.f, 0.f))
 				* glm::rotate(glm::radians(calibration_rotation.z), glm::vec3(0.f, 0.f, 1.f));
 
+			// Would using the OpenVR SDK's ApplyTransform be better here? To account for the motion of
+			// the camera mount?
 			view_info.view = glm::inverse(glm::inverse(camera_offset) * controller_poses[zed_controller]);
 			view_info.eye_pos = glm::column(view_info.view, 3);
 
@@ -458,8 +461,23 @@ int main(int argc, char **argv) {
 		SDL_GL_SwapWindow(win);
 	}
 
-	std::cout << "Calibration:\nTranslation = " << glm::to_string(calibration_translation)
-		<< "\nRotation XYZ = " << glm::to_string(calibration_rotation) << std::endl;
+	if (calibrating && zed_controller != -1 && controllers[zed_controller] != vr::k_unTrackedDeviceIndexInvalid) {
+		const size_t serial_num_len = vr->system->GetStringTrackedDeviceProperty(controllers[zed_controller],
+				vr::Prop_SerialNumber_String, nullptr, 0);
+		std::vector<char> serial_num(serial_num_len, '\0');
+		vr->system->GetStringTrackedDeviceProperty(controllers[zed_controller], vr::Prop_SerialNumber_String,
+				serial_num.data(), serial_num_len);
+
+		std::cout << "Calibration:\nTranslation = " << glm::to_string(calibration_translation)
+			<< "\nRotation XYZ = " << glm::to_string(calibration_rotation)
+			<< "\nAttached to object with serial: " << serial_num.data() << std::endl;
+
+		std::ofstream calib_out_file("zed_mr_calibration.bin", std::ios::binary);
+		calib_out_file.write(reinterpret_cast<char*>(glm::value_ptr(calibration_translation)), 3 * sizeof(float));
+		calib_out_file.write(reinterpret_cast<char*>(glm::value_ptr(calibration_rotation)), 3 * sizeof(float));
+		calib_out_file.write(reinterpret_cast<const char*>(&serial_num_len), sizeof(size_t));
+		calib_out_file.write(serial_num.data(), serial_num.size());
+	}
 
 	ImGui_ImplSdlGL3_Shutdown();
 	glDeleteBuffers(1, &view_info_buf);
