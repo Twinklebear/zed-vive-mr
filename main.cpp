@@ -201,8 +201,11 @@ int main(int argc, char **argv) {
 		* glm::rotate(glm::radians(calibration_rotation.z), glm::vec3(0.f, 0.f, 1.f));
 	camera_offset = swap_handedness * camera_offset * swap_handedness;
 #else
-	glm::vec3 calibration_translation = glm::vec3(0.088805, -0.005222, 0.020980);
-	glm::vec3 calibration_rotation = glm::vec3(-1.560165, 1.800000, -0.616456);
+	// Will: Calibration params for the 3D printed mount:
+	// translation = vec3(-0.058000, 0.046000, -0.101000)
+	// rotation = vec3(4.899998, 0.600000, -2.100000)
+	glm::vec3 calibration_translation = glm::vec3(-0.058000, 0.046000, -0.101000);
+	glm::vec3 calibration_rotation = glm::vec3(4.899998, 0.600000, -2.100000);
 	glm::mat4 camera_offset = glm::translate(calibration_translation)
 		* glm::rotate(glm::radians(calibration_rotation.y), glm::vec3(0.f, 1.f, 0.f))
 		* glm::rotate(glm::radians(calibration_rotation.x), glm::vec3(1.f, 0.f, 0.f))
