@@ -24,7 +24,7 @@ void dbg::log_debug_msg(GLenum src, GLenum type, GLuint, GLenum severity, GLsize
 	{
 		return;
 	}
-	// My texture is correct, shut the fuck up nvidia.
+	// Not sure what inconsistent texture nvidia is referring too!?
 	if (tag == 86) {
 		return;
 	}

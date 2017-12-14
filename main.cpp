@@ -81,28 +81,6 @@ int main(int argc, char **argv) {
 
 	std::shared_ptr<OpenVRDisplay> vr = std::make_shared<OpenVRDisplay>(win);
 
-#if 0
-	const glm::mat4 swap_handedness = glm::mat4(
-		glm::vec4(-1, 0, 0, 0),
-		glm::vec4(0, 1, 0, 0),
-		glm::vec4(0, 0, -1, 0),
-		glm::vec4(0, 0, 0, 1)
-	);
-
-	glm::vec3 calibration_translation = glm::vec3(-0.089805, 0.007778, -0.024980);
-	glm::vec3 calibration_rotation = glm::vec3(0.460165, 1.300000, 1.316456);
-	glm::mat4 camera_offset = glm::translate(calibration_translation)
-		* glm::rotate(glm::radians(calibration_rotation.y), glm::vec3(0.f, 1.f, 0.f))
-		* glm::rotate(glm::radians(calibration_rotation.x), glm::vec3(1.f, 0.f, 0.f))
-		* glm::rotate(glm::radians(calibration_rotation.z), glm::vec3(0.f, 0.f, 1.f));
-	camera_offset = swap_handedness * camera_offset * swap_handedness;
-#else
-	// Will: Calibration params for the 3D printed mount:
-	// translation = vec3(-0.058000, 0.046000, -0.101000)
-	// rotation = vec3(4.899998, 0.600000, -2.100000)
-	//calibration.translation = glm::vec3(-0.058000, 0.046000, -0.101000);
-	//calibration.rotation = glm::vec3(4.899998, 0.600000, -2.100000);
-#endif
 	std::unique_ptr<ZedManager> zed = std::make_unique<ZedManager>(calibration, vr);
 	if (!calibrating) {
 		zed->runtime_params.sensing_mode = sl::SENSING_MODE_FILL;
@@ -189,7 +167,10 @@ int main(int argc, char **argv) {
 	glGenFramebuffers(1, &imgui_fbo);
 	glBindFramebuffer(GL_FRAMEBUFFER, imgui_fbo);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, imgui_tex, 0);
-	GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+	if (!check_framebuffer(imgui_fbo)) {
+		std::cout << "imgui fbo incomplete" << std::endl;
+		throw std::runtime_error("invalid imgui fbo");
+	}
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 	glBindTexture(GL_TEXTURE_2D, 0);
 
@@ -302,12 +283,14 @@ int main(int argc, char **argv) {
 				-= calibration_ui_steps[vr_selected_calibration_input / 3];
 		}
 
-		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, 0);
-		glBindFramebuffer(GL_FRAMEBUFFER, imgui_fbo);
-		glClear(GL_COLOR_BUFFER_BIT);
+
 		// Render UI to a texture we can show in VR as well
 		ImGui_ImplSdlGL3_NewFrame(win);
+		glDisable(GL_DEPTH_TEST);
+		glDisable(GL_FRAMEBUFFER_SRGB);
+		glBindFramebuffer(GL_FRAMEBUFFER, imgui_fbo);
+		glClear(GL_COLOR_BUFFER_BIT);
+
 		ImGuiIO &io = ImGui::GetIO();
 		// Hack to render to a smaller ui texture panel
 		io.DisplaySize = ImVec2(IMGUI_TEX_DIMS, IMGUI_TEX_DIMS);
@@ -325,9 +308,10 @@ int main(int argc, char **argv) {
 			}
 		}
 		ImGui::End();
-		glDisable(GL_FRAMEBUFFER_SRGB);
 		ImGui::Render();
+
 		glEnable(GL_FRAMEBUFFER_SRGB);
+		glEnable(GL_DEPTH_TEST);
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
 		std::array<glm::mat4, 2> controller_poses;
