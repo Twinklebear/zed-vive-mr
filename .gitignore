@@ -5,20 +5,12 @@
 *.dll
 build/
 bin/
-data/
 imgui.ini
-*.vlfn
 
-# ignore my ycm files
-.ycm_extra_conf.py
-.ycm_extra_conf.pyc
 tags
 
 # Swap files
 *.swp
-
-# Model files
-*/res/models
 
 # Compiled Dynamic libraries
 *.so
@@ -71,6 +63,3 @@ ipch/
 Lesson*/Debug
 Lesson*/Release
 out/
-
-*.blend
-*.json
