@@ -18,7 +18,8 @@ ZedCalibration::ZedCalibration(const std::string &calibration_file) {
 		<< "\nAttached to object with serial: " << tracker_serial << std::endl;
 }
 void ZedCalibration::save(const std::string &calibration_file) const {
-	std::cout << "Saving calibration:\nTranslation = " << glm::to_string(translation)
+	std::cout << "Saving calibration to '" << calibration_file
+		<< "':\nTranslation = " << glm::to_string(translation)
 		<< "\nRotation XYZ = " << glm::to_string(rotation)
 		<< "\nAttached to object with serial: " << tracker_serial << std::endl;
 
