@@ -73,7 +73,7 @@ ZedManager::ZedManager(ZedCalibration calibration, std::shared_ptr<OpenVRDisplay
 	const std::string res_path = get_resource_path();
 	glGenVertexArrays(1, &prepass_vao);
 	prepass_shader = load_program({
-		std::make_pair(GL_VERTEX_SHADER, res_path + "fullscreen_quad_vert.glsl"),
+		std::make_pair(GL_VERTEX_SHADER, res_path + "zed_prepass_vert.glsl"),
 		std::make_pair(GL_FRAGMENT_SHADER, res_path + "zed_prepass_frag.glsl")
 	});
 

@@ -104,6 +104,7 @@ int main(int argc, char **argv) {
 	std::unique_ptr<ZedManager> zed = std::make_unique<ZedManager>(calibration, vr);
 	if (!calibrating) {
 		zed->runtime_params.sensing_mode = sl::SENSING_MODE_FILL;
+	} else {
 		zed->request_measure(sl::MEASURE_XYZRGBA);
 	}
 
