@@ -78,7 +78,7 @@ ZedManager::ZedManager(ZedCalibration calibration, std::shared_ptr<OpenVRDisplay
 		std::make_pair(GL_FRAGMENT_SHADER, res_path + "zed_prepass_frag.glsl")
 	});
 
-	glGenTextures(2, textures.data());
+	glGenTextures(textures.size(), textures.data());
 	for (auto &tex : textures) {
 		glBindTexture(GL_TEXTURE_2D, tex);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -89,7 +89,7 @@ ZedManager::ZedManager(ZedCalibration calibration, std::shared_ptr<OpenVRDisplay
 }
 ZedManager::~ZedManager() {
 	glDeleteVertexArrays(1, &prepass_vao);
-	glDeleteTextures(2, textures.data());
+	glDeleteTextures(textures.size(), textures.data());
 	glDeleteProgram(prepass_shader);
 	camera.close();
 }
@@ -176,7 +176,7 @@ void ZedManager::begin_render(glm::mat4 &view, glm::mat4 &projection) {
 	}
 }
 void ZedManager::render_zed_prepass() {
-	for (size_t i = 0; i < 2; ++i) {
+	for (size_t i = 0; i < textures.size(); ++i) {
 		glActiveTexture(GL_TEXTURE0 + i);
 		glBindTexture(GL_TEXTURE_2D, textures[i]);
 	}

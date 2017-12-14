@@ -56,5 +56,6 @@ GLuint load_texture(const std::string &file, size_t *width = nullptr, size_t *he
  */
 GLuint load_texture_array(const std::vector<std::string> &files, size_t *w = nullptr, size_t *h = nullptr);
 void set_thread_name(std::thread &thread, const char *name);
+bool check_framebuffer(GLuint fbo);
 
 #endif
