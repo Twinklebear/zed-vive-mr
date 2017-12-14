@@ -48,8 +48,6 @@ OpenVRDisplay::OpenVRDisplay(SDL_Window *window) : window(window) {
 	}
 
 	// reversed z buffer
-	// TODO: How will reversed z effect the depth compositing we get from the camera?
-	// Would it matter? We won't be viewing the composited view in VR anyways
 	glClipControl(GL_LOWER_LEFT, GL_ZERO_TO_ONE);
 	glClearDepth(0.0f);
 	glDepthFunc(GL_GREATER);
@@ -127,6 +125,8 @@ glm::mat4 openvr_m34_to_mat4(const vr::HmdMatrix34_t &t) {
 	);
 }
 
+// Reversed z projection matrix
+// https://nlguillemot.wordpress.com/2016/12/07/reversed-z-in-opengl/
 glm::mat4 mk_projection_mat(const float left, const float right,
 		const float top, const float bottom, const float near_clip)
 {

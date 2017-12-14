@@ -207,6 +207,7 @@ glm::mat4 ZedManager::camera_projection_matrix() {
 	const float height = static_cast<float>(calib_params.left_cam.image_size.height);
 
 	// From ZED Unity sample, modified for reversed-z
+	// https://nlguillemot.wordpress.com/2016/12/07/reversed-z-in-opengl/
 	glm::mat4 proj(1);
 	proj[0][0] = 1.0 / std::tan(fov_x * 0.5f);
 	proj[1][1] = 1.0 / std::tan(fov_y * 0.5f);
