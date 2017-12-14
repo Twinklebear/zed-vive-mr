@@ -35,9 +35,11 @@ int main(int argc, char **argv) {
 	ZedCalibration calibration;
 
 	bool calibrating = false;
+	std::string calibration_output;
 	for (int i = 1; i < argc; ++i) {
 		if (std::strcmp(argv[i], "--calibrate") == 0) {
 			calibrating = true;
+			calibration_output = argv[++i];
 		} else if (std::strcmp(argv[i], "--calibration-file") == 0){
 			calibration = ZedCalibration(argv[++i]);
 		}
@@ -149,6 +151,30 @@ int main(int argc, char **argv) {
     glEnable(GL_BLEND);
     glBlendEquation(GL_FUNC_ADD);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+	GLuint mirror_fb_color, mirror_fb_depth;
+	GLuint mirror_fb;
+	glGenTextures(1, &mirror_fb_color);
+	glBindTexture(GL_TEXTURE_2D, mirror_fb_color);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+	// TODO: Maybe use an SRGB8_ALPHA format
+	glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA8, WIN_WIDTH, WIN_HEIGHT);
+
+	glGenTextures(1, &mirror_fb_depth);
+	glBindTexture(GL_TEXTURE_2D, mirror_fb_depth);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+	glTexStorage2D(GL_TEXTURE_2D, 1, GL_DEPTH_COMPONENT32F, WIN_WIDTH, WIN_HEIGHT);
+
+	glGenFramebuffers(1, &mirror_fb);
+	glBindFramebuffer(GL_FRAMEBUFFER, mirror_fb);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, mirror_fb_color, 0);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, mirror_fb_depth, 0);
 
 	const int IMGUI_TEX_DIMS = 512;
 	GLuint imgui_fbo, imgui_tex;
@@ -356,7 +382,7 @@ int main(int argc, char **argv) {
 		vr->display();
 
 		glViewport(0, 0, WIN_WIDTH, WIN_HEIGHT);
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		glBindFramebuffer(GL_FRAMEBUFFER, mirror_fb);
 
 		// Render the virtual scene from the camera's viewpoint
 		zed->begin_render(view_info.view, view_info.proj);
@@ -385,7 +411,6 @@ int main(int argc, char **argv) {
 		hmd_model.render();
 		uv_sphere.render();
 
-		glDisable(GL_FRAMEBUFFER_SRGB);
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, imgui_tex);
 		glUseProgram(imgui_panel_shader);
@@ -396,13 +421,18 @@ int main(int argc, char **argv) {
 		glDisable(GL_DEPTH_TEST);
 		glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 		glEnable(GL_DEPTH_TEST);
-		glEnable(GL_FRAMEBUFFER_SRGB);
+
+		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+		glBindFramebuffer(GL_READ_FRAMEBUFFER, mirror_fb);
+		glBlitFramebuffer(0, 0, WIN_WIDTH, WIN_HEIGHT,
+				0, 0, WIN_WIDTH, WIN_HEIGHT,
+				GL_COLOR_BUFFER_BIT, GL_NEAREST);
 
 		SDL_GL_SwapWindow(win);
 	}
 
 	if (calibrating) {
-		zed->calibration.save("zed_mr_calibration.bin");
+		zed->calibration.save(calibration_output);
 	}
 	zed = nullptr;
 	vr = nullptr;

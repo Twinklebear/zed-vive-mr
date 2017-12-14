@@ -148,10 +148,10 @@ void ZedManager::begin_render(glm::mat4 &view, glm::mat4 &projection) {
 	view = calibration.tracker_to_camera() * glm::inverse(tracker_to_absolute);
 	projection = camera_projection_matrix();
 
-	// We use regular Z test for the ZED stuff
-	glClipControl(GL_LOWER_LEFT, GL_NEGATIVE_ONE_TO_ONE);
-	glClearDepth(1.0f);
-	glDepthFunc(GL_LESS);
+	// Reversed-z
+	glClipControl(GL_LOWER_LEFT, GL_ZERO_TO_ONE);
+	glClearDepth(0.0f);
+	glDepthFunc(GL_GREATER);
 
 	if (camera.grab(runtime_params) == sl::SUCCESS) {
 		for (auto &request : image_requests) {
@@ -192,15 +192,15 @@ glm::mat4 ZedManager::camera_projection_matrix() {
 	const float width = static_cast<float>(calib_params.left_cam.image_size.width);
 	const float height = static_cast<float>(calib_params.left_cam.image_size.height);
 
-	// From ZED Unity sample
+	// From ZED Unity sample, modified for reversed-z
 	glm::mat4 proj(1);
 	proj[0][0] = 1.0 / std::tan(fov_x * 0.5f);
 	proj[1][1] = 1.0 / std::tan(fov_y * 0.5f);
 	proj[2][0] = 2.0 * ((width - 1.0 * calib_params.left_cam.cx) / width) - 1.0;
 	proj[2][1] = -(2.0 * ((height - 1.0 * calib_params.left_cam.cy) / height) - 1.0);
-	proj[2][2] = -(z_far + z_near) / (z_far - z_near);
+	proj[2][2] = 0.f;
 	proj[2][3] = -1.0;
-	proj[3][2] = -(2.0 * z_far * z_near) / (z_far - z_near);
+	proj[3][2] = z_near;
 	proj[3][3] = 0.f;
 	return proj;
 }

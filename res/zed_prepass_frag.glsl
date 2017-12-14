@@ -13,12 +13,11 @@ void main(void) {
 	uv.y = 1.0 - uv.y;
 	float depth = -texture(cam_depth, uv).x;
 	if (isinf(depth) || isnan(depth)) {
-		gl_FragDepth = 1000.f;
+		gl_FragDepth = -1.f;
 		discard;
 	}
 	vec4 depth_p = proj * vec4(0, 0, depth, 1);
 	depth = depth_p.z / depth_p.w;
-	depth = (1 + depth) * 0.5;
 	gl_FragDepth = depth;
 
 	color.rgb = srgb_to_linear(texture(cam_color, uv).rgb);
