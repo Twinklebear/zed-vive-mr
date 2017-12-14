@@ -9,8 +9,6 @@ out vec4 color;
 
 void main(void) {
 	vec2 uv = gl_FragCoord.xy / win_dims;
-	// Y-flip for textures
-	uv.y = 1.0 - uv.y;
 	float depth = -texture(cam_depth, uv).x;
 	if (isinf(depth) || isnan(depth)) {
 		gl_FragDepth = -1.f;

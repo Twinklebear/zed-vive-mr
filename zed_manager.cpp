@@ -163,16 +163,22 @@ void ZedManager::begin_render(glm::mat4 &view, glm::mat4 &projection) {
 		}
 
 		sl::Mat &color_map = image_requests[sl::VIEW_LEFT];
+		sl::Mat flip_color = color_map;
+		flip_image(flip_color.getPtr<uint8_t>(), flip_color.getWidth(), flip_color.getHeight(),
+				flip_color.getChannels());
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, textures[0]);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, color_map.getWidth(), color_map.getHeight(),
-				0, GL_BGRA, GL_UNSIGNED_BYTE, color_map.getPtr<uint8_t>());
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, flip_color.getWidth(), flip_color.getHeight(),
+				0, GL_BGRA, GL_UNSIGNED_BYTE, flip_color.getPtr<uint8_t>());
 
 		sl::Mat &depth_map = measure_requests[sl::MEASURE_DEPTH];
+		sl::Mat flip_depth = depth_map;
+		flip_image(flip_depth.getPtr<float>(), flip_depth.getWidth(), flip_depth.getHeight(),
+				flip_depth.getChannels());
 		glActiveTexture(GL_TEXTURE1);
 		glBindTexture(GL_TEXTURE_2D, textures[1]);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, depth_map.getWidth(), depth_map.getHeight(),
-				0, GL_RED, GL_FLOAT, depth_map.getPtr<float>());
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, flip_depth.getWidth(), flip_depth.getHeight(),
+				0, GL_RED, GL_FLOAT, flip_depth.getPtr<float>());
 	}
 }
 void ZedManager::render_zed_prepass() {

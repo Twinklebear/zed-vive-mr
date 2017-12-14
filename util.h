@@ -1,6 +1,6 @@
-#ifndef GLT_UTIL_H
-#define GLT_UTIL_H
+#pragma once
 
+#include <algorithm>
 #include <array>
 #include <vector>
 #include <cassert>
@@ -58,4 +58,13 @@ GLuint load_texture_array(const std::vector<std::string> &files, size_t *w = nul
 void set_thread_name(std::thread &thread, const char *name);
 bool check_framebuffer(GLuint fbo);
 
-#endif
+// Y-flip a WxH image with n components per pixel.
+template<typename T>
+void flip_image(T *img, const size_t w, const size_t h, const size_t n){
+	for (size_t y = 0; y < h / 2; ++y) {
+		T *row_a = img + y * w * n;
+		T *row_b = img + (h - y - 1) * w * n;
+		std::swap_ranges(row_a, row_a + w * n, row_b);
+	}
+}
+
