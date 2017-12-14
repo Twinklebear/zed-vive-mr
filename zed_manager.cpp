@@ -52,9 +52,16 @@ ZedManager::ZedManager(ZedCalibration calibration, std::shared_ptr<OpenVRDisplay
 	sl::ERROR_CODE err = camera.open(init_params);
 	if (err != sl::SUCCESS) {
 		std::cout << "Failed to open camera: '" << zed_error_to_string(err)
-			<< "'" << std::endl;
+			<< "', retrying" << std::endl;
 		camera.close();
-		throw std::runtime_error("Failed to open ZED");
+		// Maybe try one more time?
+		err = camera.open(init_params);
+		if (err != sl::SUCCESS) {
+			camera.close();
+			std::cout << "Failed to open camera again: '" << zed_error_to_string(err)
+				<< "', aborting" << std::endl;
+			throw std::runtime_error("Failed to open ZED");
+		}
 	}
 
 	sl::CameraInformation cam_info = camera.getCameraInformation();
