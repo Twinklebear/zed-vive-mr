@@ -24,5 +24,6 @@ set_property(TARGET zed_test PROPERTY CXX_STANDARD 14)
 target_link_libraries(zed_test ${OPENGL_LIBRARIES} ${SDL2_LIBRARY}
 	${ZED_LIBRARIES} ${CUDA_CUDA_LIBRARY} ${CUDA_CUDART_LIBRARY}
 	${CUDA_NPP_LIBRARIES_ZED} ${OPENVR_SDK_LIBRARY})
-	
+target_compile_definitions(zed_test
+	PUBLIC ZED_MR_RESOURCE_DIR="${CMAKE_CURRENT_LIST_DIR}/res/")
 

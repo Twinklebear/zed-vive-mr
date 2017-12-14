@@ -17,7 +17,7 @@
 #include "stb_image.h"
 
 std::string get_resource_path(const std::string &sub_dir){
-	static std::string base_res = "C:/Users/willu/repos/zed-mr/res/";
+	static std::string base_res = std::string(ZED_MR_RESOURCE_DIR);
 	if (sub_dir.empty()){
 		return base_res;
 	}
