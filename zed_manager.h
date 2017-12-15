@@ -10,16 +10,35 @@
 #include "gl_core_4_5.h"
 #include "openvr_display.h"
 
-// The calibration is the offset from the camera to
-// the device tracking it
+/* The calibration is the offset from the device tracking the camera
+ * (it's parent), to the camera itself. For compatibility with ZED's Unity
+ * calibration app we actually work in Unity's coordinate frame internally
+ * in the calibration file but flip the matrix when calling 'tracker_to_camera'
+ * into OpenGL's coordinate frame.
+ */
 struct ZedCalibration {
 	glm::vec3 translation, rotation;
+	float fov;
 	std::string tracker_serial;
 
 	ZedCalibration();
 	ZedCalibration(const std::string &calibration_file);
 	void save(const std::string &calibration_file) const;
+	/* Get the transform from the tracker to the camera, in OpenGL's
+	 * coordinate frame.
+	 */
 	glm::mat4 tracker_to_camera() const;
+
+private:
+	/* It's good for interopability to support their text file
+	 * format, but writing floating point to text is lossy. I'm
+	 * not sure how much it would really effect the calibration
+	 * accuracy though.
+	 */
+	void load_binary(const std::string &file);
+	void save_binary(const std::string &file) const;
+	void load_zed_conf(const std::string &file);
+	void save_zed_conf(const std::string &file) const;
 };
 
 struct ZedManager {

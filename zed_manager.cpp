@@ -3,16 +3,13 @@
 #include "util.h"
 #include "zed_manager.h"
 
-ZedCalibration::ZedCalibration() : translation(0.f), rotation(0.f) {}
+ZedCalibration::ZedCalibration() : translation(0.f), rotation(0.f), fov(0.f) {}
 ZedCalibration::ZedCalibration(const std::string &calibration_file) {
-	std::ifstream calib_file(calibration_file, std::ios::binary);
-	calib_file.read(reinterpret_cast<char*>(glm::value_ptr(translation)), 3 * sizeof(float));
-	calib_file.read(reinterpret_cast<char*>(glm::value_ptr(rotation)), 3 * sizeof(float));
-	size_t serial_num_len = 0;
-	calib_file.read(reinterpret_cast<char*>(&serial_num_len), sizeof(size_t));
-	tracker_serial.resize(serial_num_len);
-	calib_file.read(&tracker_serial[0], serial_num_len);
-
+	if (calibration_file.substr(calibration_file.size() - 3) == "bin") {
+		load_binary(calibration_file);
+	} else {
+		load_zed_conf(calibration_file);
+	}
 	std::cout << "Loaded calibration:\nTranslation = " << glm::to_string(translation)
 		<< "\nRotation XYZ = " << glm::to_string(rotation)
 		<< "\nAttached to object with serial: " << tracker_serial << std::endl;
@@ -22,30 +19,102 @@ void ZedCalibration::save(const std::string &calibration_file) const {
 		<< "':\nTranslation = " << glm::to_string(translation)
 		<< "\nRotation XYZ = " << glm::to_string(rotation)
 		<< "\nAttached to object with serial: " << tracker_serial << std::endl;
-
-	std::ofstream calib_file(calibration_file, std::ios::binary);
+	if (calibration_file.substr(calibration_file.size() - 3) == "bin") {
+		save_binary(calibration_file);
+	} else {
+		save_zed_conf(calibration_file);
+	}
+}
+glm::mat4 ZedCalibration::tracker_to_camera() const {
+	const glm::mat4 unity_swap_handedness(
+			-1.f, 0.f, 0.f, 0.f,
+			0.f, 1.f, 0.f, 0.f,
+			0.f, 0.f, -1.f, 0.f,
+			0.f, 0.f, 0.f, 1.f);
+	const glm::mat4 m = glm::translate(translation)
+		* glm::rotate(glm::radians(rotation.y), glm::vec3(0.f, 1.f, 0.f))
+		* glm::rotate(glm::radians(rotation.x), glm::vec3(1.f, 0.f, 0.f))
+		* glm::rotate(glm::radians(rotation.z), glm::vec3(0.f, 0.f, 1.f));
+	return unity_swap_handedness * m * unity_swap_handedness;
+}
+void ZedCalibration::load_binary(const std::string &file) {
+	std::ifstream calib_file(file.c_str(), std::ios::binary);
+	calib_file.read(reinterpret_cast<char*>(glm::value_ptr(translation)), 3 * sizeof(float));
+	calib_file.read(reinterpret_cast<char*>(glm::value_ptr(rotation)), 3 * sizeof(float));
+	size_t serial_num_len = 0;
+	calib_file.read(reinterpret_cast<char*>(&serial_num_len), sizeof(size_t));
+	tracker_serial.resize(serial_num_len);
+	calib_file.read(&tracker_serial[0], serial_num_len);
+}
+void ZedCalibration::save_binary(const std::string &file) const {
+	std::ofstream calib_file(file.c_str(), std::ios::binary);
 	calib_file.write(reinterpret_cast<const char*>(glm::value_ptr(translation)), 3 * sizeof(float));
 	calib_file.write(reinterpret_cast<const char*>(glm::value_ptr(rotation)), 3 * sizeof(float));
 	const size_t serial_num_len = tracker_serial.size();
 	calib_file.write(reinterpret_cast<const char*>(&serial_num_len), sizeof(size_t));
 	calib_file.write(tracker_serial.c_str(), serial_num_len);
 }
-glm::mat4 ZedCalibration::tracker_to_camera() const {
-	const glm::mat4 m = glm::translate(translation)
-		* glm::rotate(glm::radians(rotation.y), glm::vec3(0.f, 1.f, 0.f))
-		* glm::rotate(glm::radians(rotation.x), glm::vec3(1.f, 0.f, 0.f))
-		* glm::rotate(glm::radians(rotation.z), glm::vec3(0.f, 0.f, 1.f));
-	return m;
+void ZedCalibration::load_zed_conf(const std::string &file) {
+	std::ifstream calib_file(file.c_str());
+	std::string line;
+	std::getline(calib_file, line);
+	if (line != "[Calibration]") {
+		throw std::runtime_error("Invalid ZED calibration file");
+	}
+	while (std::getline(calib_file, line)) {
+		auto fnd = line.find('=');
+		if (fnd == std::string::npos) {
+			throw std::runtime_error("Invalid key in '" + file + "'");
+		}
+		const std::string key = line.substr(0, fnd);
+		const std::string value = line.substr(fnd + 1);
+		std::cout << "Key = " << key << ", value = " << value << "\n";
+		if (key == "x") {
+			translation.x = std::stof(value);
+		} else if (key == "y") {
+			translation.y = std::stof(value);
+		} else if (key == "z") {
+			translation.z = std::stof(value);
+		} else if (key == "rx") {
+			rotation.x = std::stof(value);
+		} else if (key == "ry") {
+			rotation.y = std::stof(value);
+		} else if (key == "rz") {
+			rotation.z = std::stof(value);
+		} else if (key == "fov") {
+			fov = std::stof(value);
+		} else if (key == "indexController") {
+			tracker_serial = value;
+		} else {
+			std::cout << "Warning: Unrecognized key in '"
+				<< file << "':" << key << "\n";
+		}
+	}
+}
+void ZedCalibration::save_zed_conf(const std::string &file) const {
+	std::ofstream calib_file(file.c_str());
+	calib_file << "[Calibration]"
+		<< "\nx=" << translation.x
+		<< "\ny=" << translation.y
+		<< "\nz=" << translation.z
+		<< "\nrx=" << rotation.x
+		<< "\nry=" << rotation.y
+		<< "\nry=" << rotation.z
+		// FoV is ignored in their unity importer, unsure why it's in the file
+		// maybe some legacy reason. Writing it for compatability
+		<< "\nfov=" << fov
+		<< "\nindexController=" << tracker_serial;
 }
 
 ZedManager::ZedManager(ZedCalibration calibration, std::shared_ptr<OpenVRDisplay> &vr)
 	: calibration(calibration), vr(vr), tracker(vr::k_unTrackedDeviceIndexInvalid)
 {
 	sl::InitParameters init_params;
-	init_params.camera_resolution = sl::RESOLUTION_HD720;
+	init_params.camera_resolution = sl::RESOLUTION_HD1080;
 	init_params.camera_fps = 60;
 	init_params.coordinate_system = sl::COORDINATE_SYSTEM_RIGHT_HANDED_Y_UP;
 	init_params.depth_mode = sl::DEPTH_MODE_PERFORMANCE;
+	init_params.depth_minimum_distance = 0.7;
 	init_params.sdk_verbose = false;
 	init_params.coordinate_units = sl::UNIT_METER;
 
@@ -69,7 +138,11 @@ ZedManager::ZedManager(ZedCalibration calibration, std::shared_ptr<OpenVRDisplay
 		<< "\nDepth range = [" << camera.getDepthMinRangeValue()
 		<< ", " << camera.getDepthMaxRangeValue() << "]"
 		<< "\nVertical FoV: " << cam_info.calibration_parameters.left_cam.v_fov
+		<< " degrees\nHorizontal FoV: " << cam_info.calibration_parameters.left_cam.h_fov
 		<< " degrees\n";
+
+	// The ZED Unity samples don't actually use the fov in the calibration file
+	calibration.fov = cam_info.calibration_parameters.left_cam.v_fov;
 
 	if (!calibration.tracker_serial.empty()) {
 		find_tracker();
