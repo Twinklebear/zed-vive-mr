@@ -9,6 +9,7 @@ out vec4 color;
 
 void main(void) {
 	vec2 uv = gl_FragCoord.xy / win_dims;
+	uv.y = 1.0 - uv.y;
 	float depth = -texture(cam_depth, uv).x;
 	if (isnan(depth)) {
 		gl_FragDepth = -1.f;
@@ -21,7 +22,7 @@ void main(void) {
 	}
 	gl_FragDepth = depth;
 
-	color.rgb = srgb_to_linear(texture(cam_color, uv).rgb);
+	color.rgb = srgb_to_linear(texture(cam_color, uv).bgr);
 	color.a = 1;
 }
 

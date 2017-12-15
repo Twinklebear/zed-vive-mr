@@ -140,11 +140,34 @@ ZedManager::ZedManager(ZedCalibration calibration, std::shared_ptr<OpenVRDisplay
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
 	}
+
+	sl::CalibrationParameters calib_params = cam_info.calibration_parameters;
+	const size_t width = static_cast<float>(calib_params.left_cam.image_size.width);
+	const size_t height = static_cast<float>(calib_params.left_cam.image_size.height);
+	glBindTexture(GL_TEXTURE_2D, textures[0]);
+	glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA8, width, height);
+	cudaError_t cu_err = cudaGraphicsGLRegisterImage(&cuda_tex_refs[0], textures[0],
+			GL_TEXTURE_2D, cudaGraphicsRegisterFlagsWriteDiscard);
+	if (cu_err != 0) {
+		std::cout << "CUDA error making color resource" << std::endl;
+	}
+
+	glBindTexture(GL_TEXTURE_2D, textures[1]);
+	glTexStorage2D(GL_TEXTURE_2D, 1, GL_R32F, width, height);
+	cu_err = cudaGraphicsGLRegisterImage(&cuda_tex_refs[1], textures[1],
+			GL_TEXTURE_2D, cudaGraphicsRegisterFlagsWriteDiscard);
+	if (cu_err != 0) {
+		std::cout << "CUDA error making depth resource" << std::endl;
+	}
 }
 ZedManager::~ZedManager() {
 	glDeleteVertexArrays(1, &prepass_vao);
 	glDeleteTextures(textures.size(), textures.data());
 	glDeleteProgram(prepass_shader);
+	// Need to free all the GPU side memory of our images/measures
+	// before freeing the camera since it will close the CUDA context
+	image_requests.clear();
+	measure_requests.clear();
 	camera.close();
 }
 bool ZedManager::is_tracking() const {
@@ -208,29 +231,29 @@ void ZedManager::begin_render(glm::mat4 &view, glm::mat4 &projection) {
 
 	if (camera.grab(runtime_params) == sl::SUCCESS) {
 		for (auto &request : image_requests) {
-			camera.retrieveImage(request.second, request.first);
+			camera.retrieveImage(request.second, request.first, sl::MEM_GPU);
 		}
 		for (auto &request : measure_requests) {
-			camera.retrieveMeasure(request.second, request.first);
+			camera.retrieveMeasure(request.second, request.first, sl::MEM_GPU);
 		}
 
+		// TODO: Can we register the resources together as an array and map just once?
 		sl::Mat &color_map = image_requests[sl::VIEW_LEFT];
-		sl::Mat flip_color = color_map;
-		flip_image(flip_color.getPtr<uint8_t>(), flip_color.getWidth(), flip_color.getHeight(),
-				flip_color.getChannels());
-		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, textures[0]);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, flip_color.getWidth(), flip_color.getHeight(),
-				0, GL_BGRA, GL_UNSIGNED_BYTE, flip_color.getPtr<uint8_t>());
+		cudaArray_t mapped_array;
+		cudaGraphicsMapResources(1, &cuda_tex_refs[0]);
+		cudaGraphicsSubResourceGetMappedArray(&mapped_array, cuda_tex_refs[0], 0, 0);
+		cudaMemcpy2DToArray(mapped_array, 0, 0, color_map.getPtr<uint8_t>(sl::MEM_GPU),
+				color_map.getStepBytes(sl::MEM_GPU), color_map.getStepBytes(sl::MEM_GPU),
+				color_map.getHeight(), cudaMemcpyDeviceToDevice);
+		cudaGraphicsUnmapResources(1, &cuda_tex_refs[0]);
 
 		sl::Mat &depth_map = measure_requests[sl::MEASURE_DEPTH];
-		sl::Mat flip_depth = depth_map;
-		flip_image(flip_depth.getPtr<float>(), flip_depth.getWidth(), flip_depth.getHeight(),
-				flip_depth.getChannels());
-		glActiveTexture(GL_TEXTURE1);
-		glBindTexture(GL_TEXTURE_2D, textures[1]);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, flip_depth.getWidth(), flip_depth.getHeight(),
-				0, GL_RED, GL_FLOAT, flip_depth.getPtr<float>());
+		cudaGraphicsMapResources(1, &cuda_tex_refs[1]);
+		cudaGraphicsSubResourceGetMappedArray(&mapped_array, cuda_tex_refs[1], 0, 0);
+		cudaMemcpy2DToArray(mapped_array, 0, 0, depth_map.getPtr<float>(sl::MEM_GPU),
+				depth_map.getStepBytes(sl::MEM_GPU), depth_map.getStepBytes(sl::MEM_GPU),
+				depth_map.getHeight(), cudaMemcpyDeviceToDevice);
+		cudaGraphicsUnmapResources(1, &cuda_tex_refs[1]);
 	}
 }
 void ZedManager::render_zed_prepass() {

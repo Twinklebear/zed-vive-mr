@@ -4,6 +4,9 @@
 #include <string>
 #include <array>
 #include <memory>
+#include <cuda.h>
+#include <cuda_runtime.h>
+#include <cuda_gl_interop.h>
 #include <glm/glm.hpp>
 #include <glm/ext.hpp>
 #include <sl/Camera.hpp>
@@ -46,6 +49,8 @@ struct ZedManager {
 	GLuint prepass_vao, prepass_shader;
 	// ZED color and depth textures
 	std::array<GLuint, 2> textures;
+	// ZED color and depth CUDA resource references
+	std::array<cudaGraphicsResource_t, 2> cuda_tex_refs;
 
 	ZedManager(ZedCalibration calibration, std::shared_ptr<OpenVRDisplay> &vr);
 	~ZedManager();
