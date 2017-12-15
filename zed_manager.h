@@ -30,15 +30,8 @@ struct ZedCalibration {
 	glm::mat4 tracker_to_camera() const;
 
 private:
-	/* It's good for interopability to support their text file
-	 * format, but writing floating point to text is lossy. I'm
-	 * not sure how much it would really effect the calibration
-	 * accuracy though.
-	 */
-	void load_binary(const std::string &file);
-	void save_binary(const std::string &file) const;
-	void load_zed_conf(const std::string &file);
-	void save_zed_conf(const std::string &file) const;
+	void load_calibration(const std::string &file);
+	void save_calibration(const std::string &file) const;
 };
 
 struct ZedManager {

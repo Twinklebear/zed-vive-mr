@@ -5,11 +5,7 @@
 
 ZedCalibration::ZedCalibration() : translation(0.f), rotation(0.f), fov(0.f) {}
 ZedCalibration::ZedCalibration(const std::string &calibration_file) {
-	if (calibration_file.substr(calibration_file.size() - 3) == "bin") {
-		load_binary(calibration_file);
-	} else {
-		load_zed_conf(calibration_file);
-	}
+	load_calibration(calibration_file);
 	std::cout << "Loaded calibration:\nTranslation = " << glm::to_string(translation)
 		<< "\nRotation XYZ = " << glm::to_string(rotation)
 		<< "\nAttached to object with serial: " << tracker_serial << std::endl;
@@ -19,11 +15,7 @@ void ZedCalibration::save(const std::string &calibration_file) const {
 		<< "':\nTranslation = " << glm::to_string(translation)
 		<< "\nRotation XYZ = " << glm::to_string(rotation)
 		<< "\nAttached to object with serial: " << tracker_serial << std::endl;
-	if (calibration_file.substr(calibration_file.size() - 3) == "bin") {
-		save_binary(calibration_file);
-	} else {
-		save_zed_conf(calibration_file);
-	}
+	save_calibration(calibration_file);
 }
 glm::mat4 ZedCalibration::tracker_to_camera() const {
 	const glm::mat4 unity_swap_handedness(
@@ -37,24 +29,7 @@ glm::mat4 ZedCalibration::tracker_to_camera() const {
 		* glm::rotate(glm::radians(rotation.z), glm::vec3(0.f, 0.f, 1.f));
 	return unity_swap_handedness * m * unity_swap_handedness;
 }
-void ZedCalibration::load_binary(const std::string &file) {
-	std::ifstream calib_file(file.c_str(), std::ios::binary);
-	calib_file.read(reinterpret_cast<char*>(glm::value_ptr(translation)), 3 * sizeof(float));
-	calib_file.read(reinterpret_cast<char*>(glm::value_ptr(rotation)), 3 * sizeof(float));
-	size_t serial_num_len = 0;
-	calib_file.read(reinterpret_cast<char*>(&serial_num_len), sizeof(size_t));
-	tracker_serial.resize(serial_num_len);
-	calib_file.read(&tracker_serial[0], serial_num_len);
-}
-void ZedCalibration::save_binary(const std::string &file) const {
-	std::ofstream calib_file(file.c_str(), std::ios::binary);
-	calib_file.write(reinterpret_cast<const char*>(glm::value_ptr(translation)), 3 * sizeof(float));
-	calib_file.write(reinterpret_cast<const char*>(glm::value_ptr(rotation)), 3 * sizeof(float));
-	const size_t serial_num_len = tracker_serial.size();
-	calib_file.write(reinterpret_cast<const char*>(&serial_num_len), sizeof(size_t));
-	calib_file.write(tracker_serial.c_str(), serial_num_len);
-}
-void ZedCalibration::load_zed_conf(const std::string &file) {
+void ZedCalibration::load_calibration(const std::string &file) {
 	std::ifstream calib_file(file.c_str());
 	std::string line;
 	std::getline(calib_file, line);
@@ -68,7 +43,6 @@ void ZedCalibration::load_zed_conf(const std::string &file) {
 		}
 		const std::string key = line.substr(0, fnd);
 		const std::string value = line.substr(fnd + 1);
-		std::cout << "Key = " << key << ", value = " << value << "\n";
 		if (key == "x") {
 			translation.x = std::stof(value);
 		} else if (key == "y") {
@@ -91,7 +65,7 @@ void ZedCalibration::load_zed_conf(const std::string &file) {
 		}
 	}
 }
-void ZedCalibration::save_zed_conf(const std::string &file) const {
+void ZedCalibration::save_calibration(const std::string &file) const {
 	std::ofstream calib_file(file.c_str());
 	calib_file << "[Calibration]"
 		<< "\nx=" << translation.x
@@ -110,7 +84,7 @@ ZedManager::ZedManager(ZedCalibration calibration, std::shared_ptr<OpenVRDisplay
 	: calibration(calibration), vr(vr), tracker(vr::k_unTrackedDeviceIndexInvalid)
 {
 	sl::InitParameters init_params;
-	init_params.camera_resolution = sl::RESOLUTION_HD1080;
+	init_params.camera_resolution = sl::RESOLUTION_HD720;
 	init_params.camera_fps = 60;
 	init_params.coordinate_system = sl::COORDINATE_SYSTEM_RIGHT_HANDED_Y_UP;
 	init_params.depth_mode = sl::DEPTH_MODE_PERFORMANCE;
