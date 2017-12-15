@@ -198,8 +198,6 @@ void ZedManager::begin_render(glm::mat4 &view, glm::mat4 &projection) {
 	if (is_tracking()) {
 		tracker_to_absolute = openvr_m34_to_mat4(vr->tracked_device_poses[tracker].mDeviceToAbsoluteTracking);
 	}
-	// TODO: Is this going to be correct? Or will the calibration I computed be wrong b/c I had the
-	// matrix multiplication in the wrong order. Will this fix the ZED calibration import?
 	view = calibration.tracker_to_camera() * glm::inverse(tracker_to_absolute);
 	projection = camera_projection_matrix();
 
