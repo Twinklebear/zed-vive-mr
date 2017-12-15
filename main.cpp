@@ -28,12 +28,8 @@ struct ViewInfo {
 	glm::vec4 eye_pos;
 };
 
-glm::mat4 zed_projection_matrix(sl::Camera &zed);
-std::string zed_error_to_string(const sl::ERROR_CODE &err);
-
 int main(int argc, char **argv) {
 	ZedCalibration calibration;
-
 	bool calibrating = false;
 	std::string calibration_output;
 	for (int i = 1; i < argc; ++i) {
