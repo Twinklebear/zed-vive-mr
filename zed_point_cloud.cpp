@@ -2,9 +2,14 @@
 #include "util.h"
 #include "zed_point_cloud.h"
 
-PointCloud::PointCloud() : num_points(0) {
+PointCloud::PointCloud(size_t num_points) : num_points(num_points) {
 	glGenVertexArrays(1, &vao);
 	glGenBuffers(1, &ssbo);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo);
+	glBufferStorage(GL_SHADER_STORAGE_BUFFER, num_points * 4 * sizeof(float),
+			nullptr, 0);
+	cudaGraphicsGLRegisterBuffer(&cuda_ssbo_ref, ssbo,
+			cudaGraphicsRegisterFlagsWriteDiscard);
 
 	const std::string res_path = get_resource_path();
 	shader = load_program({
@@ -16,13 +21,18 @@ PointCloud::PointCloud() : num_points(0) {
 PointCloud::~PointCloud() {
 	glDeleteProgram(shader);
 	glDeleteVertexArrays(1, &vao);
+	cudaGraphicsUnregisterResource(cuda_ssbo_ref);
 	glDeleteBuffers(1, &ssbo);
 }
 void PointCloud::update_point_cloud(const sl::Mat &pc) {
-	num_points = pc.getWidth() * pc.getHeight();
-	glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo);
-	glBufferData(GL_SHADER_STORAGE_BUFFER, num_points * pc.getPixelBytes(),
-			pc.getPtr<float>(), GL_STREAM_DRAW);
+	assert(num_points == pc.getWidth() * pc.getHeight());
+	cudaGraphicsMapResources(1, &cuda_ssbo_ref);
+	void *mapped_ptr = nullptr;
+	size_t size = 0;
+	cudaGraphicsResourceGetMappedPointer(&mapped_ptr, &size, cuda_ssbo_ref);
+	cudaMemcpy(mapped_ptr, pc.getPtr<float>(sl::MEM_GPU),
+			num_points * 4 * sizeof(float), cudaMemcpyDeviceToDevice);
+	cudaGraphicsUnmapResources(1, &cuda_ssbo_ref);
 }
 void PointCloud::set_model_mat(const glm::mat4 &mat) {
 	model_mat = mat;

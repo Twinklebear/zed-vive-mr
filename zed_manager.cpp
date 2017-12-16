@@ -84,7 +84,7 @@ ZedManager::ZedManager(ZedCalibration calibration, std::shared_ptr<OpenVRDisplay
 	: calibration(calibration), vr(vr), tracker(vr::k_unTrackedDeviceIndexInvalid)
 {
 	sl::InitParameters init_params;
-	init_params.camera_resolution = sl::RESOLUTION_HD720;
+	init_params.camera_resolution = sl::RESOLUTION_HD1080;
 	init_params.camera_fps = 60;
 	init_params.coordinate_system = sl::COORDINATE_SYSTEM_RIGHT_HANDED_Y_UP;
 	init_params.depth_mode = sl::DEPTH_MODE_PERFORMANCE;
@@ -161,6 +161,9 @@ ZedManager::ZedManager(ZedCalibration calibration, std::shared_ptr<OpenVRDisplay
 	}
 }
 ZedManager::~ZedManager() {
+	for (auto &cu_res : cuda_tex_refs) {
+		cudaGraphicsUnregisterResource(cu_res);
+	}
 	glDeleteVertexArrays(1, &prepass_vao);
 	glDeleteTextures(textures.size(), textures.data());
 	glDeleteProgram(prepass_shader);
@@ -238,6 +241,7 @@ void ZedManager::begin_render(glm::mat4 &view, glm::mat4 &projection) {
 		}
 
 		// TODO: Can we register the resources together as an array and map just once?
+		// TODO: Will doing this copy async help us avoid dropping the frame?
 		sl::Mat &color_map = image_requests[sl::VIEW_LEFT];
 		cudaArray_t mapped_array;
 		cudaGraphicsMapResources(1, &cuda_tex_refs[0]);

@@ -91,7 +91,8 @@ int main(int argc, char **argv) {
 	ObjModel uv_sphere(res_path + "uv_sphere.obj");
 	uv_sphere.set_model_mat(glm::translate(glm::vec3(0.f, 1.5f, 1.f)) * glm::scale(glm::vec3(0.25f)));
 
-	PointCloud point_cloud;
+	sl::Resolution cloud_resolution = zed->camera.getCameraInformation().calibration_parameters.left_cam.image_size;
+	PointCloud point_cloud(cloud_resolution.width * cloud_resolution.height);
 
 	vr::TrackedDeviceIndex_t zed_controller = -1;
 	vr::TrackedDeviceIndex_t user_controller = -1;
