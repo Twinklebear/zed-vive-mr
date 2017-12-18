@@ -47,10 +47,18 @@ struct ZedManager {
 	std::map<sl::MEASURE, sl::Mat> measure_requests;
 
 	GLuint prepass_vao, prepass_shader;
-	// ZED color and depth textures
-	std::array<GLuint, 2> textures;
+	// ZED color and depth textures to do ping-ponging
+	std::array<GLuint, 2> color_textures;
+	std::array<GLuint, 2> depth_textures;
 	// ZED color and depth CUDA resource references
-	std::array<cudaGraphicsResource_t, 2> cuda_tex_refs;
+	std::array<cudaGraphicsResource_t, 2> cuda_color_tex_refs;
+	std::array<cudaGraphicsResource_t, 2> cuda_depth_tex_refs;
+	// CUDA streams to do memcpys async and in parallel
+	std::array<cudaStream_t, 2> cuda_streams;
+	// Events to check when the copies have finished
+	std::array<cudaEvent_t, 2> cuda_events;
+	size_t copy_target;
+	bool is_copying;
 
 	ZedManager(ZedCalibration calibration, std::shared_ptr<OpenVRDisplay> &vr);
 	~ZedManager();

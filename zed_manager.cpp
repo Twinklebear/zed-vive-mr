@@ -132,40 +132,72 @@ ZedManager::ZedManager(ZedCalibration calibration, std::shared_ptr<OpenVRDisplay
 		std::make_pair(GL_FRAGMENT_SHADER, res_path + "zed_prepass_frag.glsl")
 	});
 
-	glGenTextures(textures.size(), textures.data());
-	for (auto &tex : textures) {
+	is_copying = false;
+	copy_target = 1;
+	sl::CalibrationParameters calib_params = cam_info.calibration_parameters;
+	const size_t width = static_cast<float>(calib_params.left_cam.image_size.width);
+	const size_t height = static_cast<float>(calib_params.left_cam.image_size.height);
+
+	glGenTextures(color_textures.size(), color_textures.data());
+	for (size_t i = 0; i < color_textures.size(); ++i) {
+		GLuint tex = color_textures[i];
 		glBindTexture(GL_TEXTURE_2D, tex);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+
+		glBindTexture(GL_TEXTURE_2D, tex);
+		glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA8, width, height);
+		cudaError_t cu_err = cudaGraphicsGLRegisterImage(&cuda_color_tex_refs[i], tex,
+				GL_TEXTURE_2D, cudaGraphicsRegisterFlagsWriteDiscard);
+		if (cu_err != 0) {
+			std::cout << "CUDA error making color resource" << std::endl;
+		}
 	}
 
-	sl::CalibrationParameters calib_params = cam_info.calibration_parameters;
-	const size_t width = static_cast<float>(calib_params.left_cam.image_size.width);
-	const size_t height = static_cast<float>(calib_params.left_cam.image_size.height);
-	glBindTexture(GL_TEXTURE_2D, textures[0]);
-	glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA8, width, height);
-	cudaError_t cu_err = cudaGraphicsGLRegisterImage(&cuda_tex_refs[0], textures[0],
-			GL_TEXTURE_2D, cudaGraphicsRegisterFlagsWriteDiscard);
-	if (cu_err != 0) {
-		std::cout << "CUDA error making color resource" << std::endl;
+	glGenTextures(depth_textures.size(), depth_textures.data());
+	for (size_t i = 0; i < depth_textures.size(); ++i) {
+		GLuint tex = depth_textures[i];
+		glBindTexture(GL_TEXTURE_2D, tex);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+
+		glBindTexture(GL_TEXTURE_2D, tex);
+		glTexStorage2D(GL_TEXTURE_2D, 1, GL_R32F, width, height);
+		cudaError_t cu_err = cudaGraphicsGLRegisterImage(&cuda_depth_tex_refs[i], tex,
+				GL_TEXTURE_2D, cudaGraphicsRegisterFlagsWriteDiscard);
+		if (cu_err != 0) {
+			std::cout << "CUDA error making depth resource" << std::endl;
+		}
 	}
 
-	glBindTexture(GL_TEXTURE_2D, textures[1]);
-	glTexStorage2D(GL_TEXTURE_2D, 1, GL_R32F, width, height);
-	cu_err = cudaGraphicsGLRegisterImage(&cuda_tex_refs[1], textures[1],
-			GL_TEXTURE_2D, cudaGraphicsRegisterFlagsWriteDiscard);
-	if (cu_err != 0) {
-		std::cout << "CUDA error making depth resource" << std::endl;
+	for (auto &s : cuda_streams) {
+		cudaStreamCreate(&s);
+	}
+	for (auto &e : cuda_events) {
+		cudaEventCreate(&e);
 	}
 }
 ZedManager::~ZedManager() {
-	for (auto &cu_res : cuda_tex_refs) {
+	for (auto &cu_res : cuda_color_tex_refs) {
 		cudaGraphicsUnregisterResource(cu_res);
 	}
+	for (auto &cu_res : cuda_depth_tex_refs) {
+		cudaGraphicsUnregisterResource(cu_res);
+	}
+	for (auto &s : cuda_streams) {
+		cudaStreamDestroy(s);
+	}
+	for (auto &e : cuda_events) {
+		cudaEventDestroy(e);
+	}
+
 	glDeleteVertexArrays(1, &prepass_vao);
-	glDeleteTextures(textures.size(), textures.data());
+	glDeleteTextures(color_textures.size(), color_textures.data());
+	glDeleteTextures(depth_textures.size(), depth_textures.data());
 	glDeleteProgram(prepass_shader);
 	// Need to free all the GPU side memory of our images/measures
 	// before freeing the camera since it will close the CUDA context
@@ -232,7 +264,16 @@ void ZedManager::begin_render(glm::mat4 &view, glm::mat4 &projection) {
 	glClearDepth(0.0f);
 	glDepthFunc(GL_GREATER);
 
-	if (camera.grab(runtime_params) == sl::SUCCESS) {
+	if (is_copying && cudaEventQuery(cuda_events[0]) == cudaSuccess && cudaEventQuery(cuda_events[1]) == cudaSuccess) {
+		is_copying = false;
+		cudaGraphicsUnmapResources(1, &cuda_color_tex_refs[copy_target]);
+		cudaGraphicsUnmapResources(1, &cuda_depth_tex_refs[copy_target]);
+		copy_target = (copy_target + 1) % 2;
+	}
+
+	if (!is_copying && camera.grab(runtime_params) == sl::SUCCESS) {
+		is_copying = true;
+
 		for (auto &request : image_requests) {
 			camera.retrieveImage(request.second, request.first, sl::MEM_GPU);
 		}
@@ -244,27 +285,29 @@ void ZedManager::begin_render(glm::mat4 &view, glm::mat4 &projection) {
 		// TODO: Will doing this copy async help us avoid dropping the frame?
 		sl::Mat &color_map = image_requests[sl::VIEW_LEFT];
 		cudaArray_t mapped_array;
-		cudaGraphicsMapResources(1, &cuda_tex_refs[0]);
-		cudaGraphicsSubResourceGetMappedArray(&mapped_array, cuda_tex_refs[0], 0, 0);
-		cudaMemcpy2DToArray(mapped_array, 0, 0, color_map.getPtr<uint8_t>(sl::MEM_GPU),
+		cudaGraphicsMapResources(1, &cuda_color_tex_refs[copy_target]);
+		cudaGraphicsSubResourceGetMappedArray(&mapped_array, cuda_color_tex_refs[copy_target], 0, 0);
+		cudaMemcpy2DToArrayAsync(mapped_array, 0, 0, color_map.getPtr<uint8_t>(sl::MEM_GPU),
 				color_map.getStepBytes(sl::MEM_GPU), color_map.getStepBytes(sl::MEM_GPU),
-				color_map.getHeight(), cudaMemcpyDeviceToDevice);
-		cudaGraphicsUnmapResources(1, &cuda_tex_refs[0]);
+				color_map.getHeight(), cudaMemcpyDeviceToDevice, cuda_streams[0]);
+		cudaEventRecord(cuda_events[0], cuda_streams[0]);
 
 		sl::Mat &depth_map = measure_requests[sl::MEASURE_DEPTH];
-		cudaGraphicsMapResources(1, &cuda_tex_refs[1]);
-		cudaGraphicsSubResourceGetMappedArray(&mapped_array, cuda_tex_refs[1], 0, 0);
-		cudaMemcpy2DToArray(mapped_array, 0, 0, depth_map.getPtr<float>(sl::MEM_GPU),
+		cudaGraphicsMapResources(1, &cuda_depth_tex_refs[copy_target]);
+		cudaGraphicsSubResourceGetMappedArray(&mapped_array, cuda_depth_tex_refs[copy_target], 0, 0);
+		cudaMemcpy2DToArrayAsync(mapped_array, 0, 0, depth_map.getPtr<float>(sl::MEM_GPU),
 				depth_map.getStepBytes(sl::MEM_GPU), depth_map.getStepBytes(sl::MEM_GPU),
-				depth_map.getHeight(), cudaMemcpyDeviceToDevice);
-		cudaGraphicsUnmapResources(1, &cuda_tex_refs[1]);
+				depth_map.getHeight(), cudaMemcpyDeviceToDevice, cuda_streams[1]);
+		cudaEventRecord(cuda_events[1], cuda_streams[1]);
 	}
 }
 void ZedManager::render_zed_prepass() {
-	for (size_t i = 0; i < textures.size(); ++i) {
-		glActiveTexture(GL_TEXTURE0 + i);
-		glBindTexture(GL_TEXTURE_2D, textures[i]);
-	}
+	size_t render_texture = (copy_target + 1) % 2;
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, color_textures[render_texture]);
+	glActiveTexture(GL_TEXTURE1);
+	glBindTexture(GL_TEXTURE_2D, depth_textures[render_texture]);
+
 	glBindVertexArray(prepass_vao);
 	glUseProgram(prepass_shader);
 	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
