@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <string>
 #include <vector>
 #include <cuda.h>
@@ -10,11 +11,18 @@
 #include "gl_core_4_5.h"
 
 class PointCloud {
-	GLuint shader, vao, ssbo;
-	cudaGraphicsResource_t cuda_ssbo_ref;
+	size_t num_points;
+	bool has_data;
+	GLuint shader, vao;
+	std::array<GLuint, 2> ssbo;
 	GLuint model_mat_unif;
 	glm::mat4 model_mat;
-	size_t num_points;
+
+	std::array<cudaGraphicsResource_t, 2> cuda_ssbo_ref;
+	cudaStream_t cuda_stream;
+	cudaEvent_t cuda_event;
+	size_t copy_target;
+	bool is_copying;
 
 public:
 	PointCloud(size_t num_points);
