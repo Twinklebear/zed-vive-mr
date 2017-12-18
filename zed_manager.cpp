@@ -188,11 +188,16 @@ ZedManager::~ZedManager() {
 	for (auto &cu_res : cuda_depth_tex_refs) {
 		cudaGraphicsUnregisterResource(cu_res);
 	}
+	for (auto &e : cuda_events) {
+		cudaEventSynchronize(e);
+		cudaEventDestroy(e);
+	}
+	if (is_copying) {
+		cudaGraphicsUnmapResources(1, &cuda_color_tex_refs[copy_target]);
+		cudaGraphicsUnmapResources(1, &cuda_depth_tex_refs[copy_target]);
+	}
 	for (auto &s : cuda_streams) {
 		cudaStreamDestroy(s);
-	}
-	for (auto &e : cuda_events) {
-		cudaEventDestroy(e);
 	}
 
 	glDeleteVertexArrays(1, &prepass_vao);
@@ -264,11 +269,18 @@ void ZedManager::begin_render(glm::mat4 &view, glm::mat4 &projection) {
 	glClearDepth(0.0f);
 	glDepthFunc(GL_GREATER);
 
-	if (is_copying && cudaEventQuery(cuda_events[0]) == cudaSuccess && cudaEventQuery(cuda_events[1]) == cudaSuccess) {
-		is_copying = false;
-		cudaGraphicsUnmapResources(1, &cuda_color_tex_refs[copy_target]);
-		cudaGraphicsUnmapResources(1, &cuda_depth_tex_refs[copy_target]);
-		copy_target = (copy_target + 1) % 2;
+	if (is_copying) {
+		std::array<cudaError_t, 2> err = {cudaEventQuery(cuda_events[0]), cudaEventQuery(cuda_events[1])};
+		if (err[0] == cudaSuccess && err[1] == cudaSuccess) {
+			is_copying = false;
+			cudaGraphicsUnmapResources(1, &cuda_color_tex_refs[copy_target], cuda_streams[0]);
+			cudaGraphicsUnmapResources(1, &cuda_depth_tex_refs[copy_target], cuda_streams[1]);
+			copy_target = (copy_target + 1) % 2;
+		} else if (err[0] != cudaSuccess && err[0] != cudaErrorNotReady) {
+			throw std::runtime_error("Failure executing copy of color texture");
+		} else if (err[1] != cudaSuccess && err[1] != cudaErrorNotReady) {
+			throw std::runtime_error("Failure executing copy of depth texture");
+		}
 	}
 
 	if (!is_copying && camera.grab(runtime_params) == sl::SUCCESS) {
@@ -285,7 +297,7 @@ void ZedManager::begin_render(glm::mat4 &view, glm::mat4 &projection) {
 		// TODO: Will doing this copy async help us avoid dropping the frame?
 		sl::Mat &color_map = image_requests[sl::VIEW_LEFT];
 		cudaArray_t mapped_array;
-		cudaGraphicsMapResources(1, &cuda_color_tex_refs[copy_target]);
+		cudaGraphicsMapResources(1, &cuda_color_tex_refs[copy_target], cuda_streams[0]);
 		cudaGraphicsSubResourceGetMappedArray(&mapped_array, cuda_color_tex_refs[copy_target], 0, 0);
 		cudaMemcpy2DToArrayAsync(mapped_array, 0, 0, color_map.getPtr<uint8_t>(sl::MEM_GPU),
 				color_map.getStepBytes(sl::MEM_GPU), color_map.getStepBytes(sl::MEM_GPU),
@@ -293,7 +305,7 @@ void ZedManager::begin_render(glm::mat4 &view, glm::mat4 &projection) {
 		cudaEventRecord(cuda_events[0], cuda_streams[0]);
 
 		sl::Mat &depth_map = measure_requests[sl::MEASURE_DEPTH];
-		cudaGraphicsMapResources(1, &cuda_depth_tex_refs[copy_target]);
+		cudaGraphicsMapResources(1, &cuda_depth_tex_refs[copy_target], cuda_streams[1]);
 		cudaGraphicsSubResourceGetMappedArray(&mapped_array, cuda_depth_tex_refs[copy_target], 0, 0);
 		cudaMemcpy2DToArrayAsync(mapped_array, 0, 0, depth_map.getPtr<float>(sl::MEM_GPU),
 				depth_map.getStepBytes(sl::MEM_GPU), depth_map.getStepBytes(sl::MEM_GPU),
