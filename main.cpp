@@ -381,10 +381,13 @@ int main(int argc, char **argv) {
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		zed->render_zed_prepass();
 
+		for (size_t i = 0; i < controllers.size(); ++i) {
+			if (controllers[i] != vr::k_unTrackedDeviceIndexInvalid) {
+				controller.set_model_mat(controller_poses[i]);
+				controller.render();
+			}
+		}
 		if (user_controller != -1 && controllers[user_controller] != vr::k_unTrackedDeviceIndexInvalid) {
-			controller.set_model_mat(controller_poses[user_controller]);
-			controller.render();
-
 			suzanne.set_model_mat(controller_poses[user_controller]);
 			suzanne.render();
 		}
