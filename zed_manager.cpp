@@ -300,7 +300,7 @@ void ZedManager::begin_render(glm::mat4 &view, glm::mat4 &projection) {
 		cudaGraphicsMapResources(1, &cuda_color_tex_refs[copy_target], cuda_streams[0]);
 		cudaGraphicsSubResourceGetMappedArray(&mapped_array, cuda_color_tex_refs[copy_target], 0, 0);
 		cudaMemcpy2DToArrayAsync(mapped_array, 0, 0, color_map.getPtr<uint8_t>(sl::MEM_GPU),
-				color_map.getStepBytes(sl::MEM_GPU), color_map.getStepBytes(sl::MEM_GPU),
+				color_map.getStepBytes(sl::MEM_GPU), color_map.getWidth() * 4,
 				color_map.getHeight(), cudaMemcpyDeviceToDevice, cuda_streams[0]);
 		cudaEventRecord(cuda_events[0], cuda_streams[0]);
 
@@ -308,7 +308,7 @@ void ZedManager::begin_render(glm::mat4 &view, glm::mat4 &projection) {
 		cudaGraphicsMapResources(1, &cuda_depth_tex_refs[copy_target], cuda_streams[1]);
 		cudaGraphicsSubResourceGetMappedArray(&mapped_array, cuda_depth_tex_refs[copy_target], 0, 0);
 		cudaMemcpy2DToArrayAsync(mapped_array, 0, 0, depth_map.getPtr<float>(sl::MEM_GPU),
-				depth_map.getStepBytes(sl::MEM_GPU), depth_map.getStepBytes(sl::MEM_GPU),
+				depth_map.getStepBytes(sl::MEM_GPU), depth_map.getWidth() * sizeof(float),
 				depth_map.getHeight(), cudaMemcpyDeviceToDevice, cuda_streams[1]);
 		cudaEventRecord(cuda_events[1], cuda_streams[1]);
 	}
