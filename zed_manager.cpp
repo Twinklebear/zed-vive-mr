@@ -18,16 +18,11 @@ void ZedCalibration::save(const std::string &calibration_file) const {
 	save_calibration(calibration_file);
 }
 glm::mat4 ZedCalibration::tracker_to_camera() const {
-	const glm::mat4 unity_swap_handedness(
-			-1.f, 0.f, 0.f, 0.f,
-			0.f, 1.f, 0.f, 0.f,
-			0.f, 0.f, -1.f, 0.f,
-			0.f, 0.f, 0.f, 1.f);
 	const glm::mat4 m = glm::translate(translation)
-		* glm::rotate(glm::radians(rotation.y), glm::vec3(0.f, 1.f, 0.f))
-		* glm::rotate(glm::radians(rotation.x), glm::vec3(1.f, 0.f, 0.f))
+		* glm::rotate(glm::radians(rotation.x), glm::vec3(0.f, 1.f, 0.f))
+		* glm::rotate(glm::radians(rotation.y), glm::vec3(1.f, 0.f, 0.f))
 		* glm::rotate(glm::radians(rotation.z), glm::vec3(0.f, 0.f, 1.f));
-	return unity_swap_handedness * m * unity_swap_handedness;
+	return m;
 }
 void ZedCalibration::load_calibration(const std::string &file) {
 	std::ifstream calib_file(file.c_str());

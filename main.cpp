@@ -116,7 +116,7 @@ int main(int argc, char **argv) {
  			std::cout << "Device " << i << " model name '" << model_name << "'\n";
 			if (model_name == "{htc}vr_tracker_vive_1_0") {
 				tracker_index = i;
-				zed->tracker = i;
+				zed->set_tracker(i);
 				std::cout << "Found Vive tracker at device " << i << "\n";
 			}
 		}
