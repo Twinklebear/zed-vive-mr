@@ -19,8 +19,8 @@ void ZedCalibration::save(const std::string &calibration_file) const {
 }
 glm::mat4 ZedCalibration::tracker_to_camera() const {
 	const glm::mat4 m = glm::translate(translation)
-		* glm::rotate(glm::radians(rotation.x), glm::vec3(0.f, 1.f, 0.f))
-		* glm::rotate(glm::radians(rotation.y), glm::vec3(1.f, 0.f, 0.f))
+		* glm::rotate(glm::radians(rotation.y), glm::vec3(0.f, 1.f, 0.f))
+		* glm::rotate(glm::radians(rotation.x), glm::vec3(1.f, 0.f, 0.f))
 		* glm::rotate(glm::radians(rotation.z), glm::vec3(0.f, 0.f, 1.f));
 	return m;
 }
