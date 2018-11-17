@@ -44,7 +44,7 @@ int main(int argc, char **argv) {
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 5);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG);
+	//SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG);
 
 	SDL_Window *win = SDL_CreateWindow("ZED MR Test", SDL_WINDOWPOS_CENTERED,
 			SDL_WINDOWPOS_CENTERED, WIN_WIDTH, WIN_HEIGHT, SDL_WINDOW_OPENGL);
@@ -71,9 +71,9 @@ int main(int argc, char **argv) {
 
 	ImGui_ImplSdlGL3_Init(win);
 
-	dbg::register_debug_callback();
-	glDebugMessageInsert(GL_DEBUG_SOURCE_APPLICATION, GL_DEBUG_TYPE_MARKER,
-			0, GL_DEBUG_SEVERITY_NOTIFICATION, 16, "DEBUG LOG START");
+	//dbg::register_debug_callback();
+	//glDebugMessageInsert(GL_DEBUG_SOURCE_APPLICATION, GL_DEBUG_TYPE_MARKER,
+	//		0, GL_DEBUG_SEVERITY_NOTIFICATION, 16, "DEBUG LOG START");
 
 	std::shared_ptr<OpenVRDisplay> vr = std::make_shared<OpenVRDisplay>(win);
 
@@ -86,6 +86,7 @@ int main(int argc, char **argv) {
 
 	const std::string res_path = get_resource_path();
 	ObjModel controller(res_path + "controller.obj");
+	ObjModel vive_tracker(res_path + "vivetracker.obj");
 	ObjModel hmd_model(res_path + "generic_hmd.obj");
 	ObjModel suzanne(res_path + "suzanne.obj");
 	ObjModel uv_sphere(res_path + "uv_sphere.obj");
@@ -100,7 +101,28 @@ int main(int argc, char **argv) {
 		vr->system->GetTrackedDeviceIndexForControllerRole(vr::TrackedControllerRole_RightHand),
 		vr->system->GetTrackedDeviceIndexForControllerRole(vr::TrackedControllerRole_LeftHand)
 	};
-	if (zed->tracker != vr::k_unTrackedDeviceIndexInvalid) {
+
+	// See if we have a vive tracker attached
+	vr::TrackedDeviceIndex_t tracker_index = vr::k_unTrackedDeviceIndexInvalid;
+	for (vr::TrackedDeviceIndex_t i = 0; i < vr::k_unMaxTrackedDeviceCount; ++i) {
+		if (vr->system->GetTrackedDeviceClass(i) != vr::TrackedDeviceClass_Invalid) {
+			// The len here includes the null terminator
+			const size_t len = vr->system->GetStringTrackedDeviceProperty(i, vr::Prop_RenderModelName_String, nullptr, 0);
+			if (len == 0) {
+				continue;
+			}
+			std::string model_name(len - 1, ' ');
+			vr->system->GetStringTrackedDeviceProperty(i, vr::Prop_RenderModelName_String, &model_name[0], len);
+ 			std::cout << "Device " << i << " model name '" << model_name << "'\n";
+			if (model_name == "{htc}vr_tracker_vive_1_0") {
+				tracker_index = i;
+				zed->tracker = i;
+				std::cout << "Found Vive tracker at device " << i << "\n";
+			}
+		}
+	}
+
+	if (zed->tracker != vr::k_unTrackedDeviceIndexInvalid && zed->tracker != tracker_index) {
 		if (zed->tracker == controllers[0]) {
 			zed_controller = 0;
 			user_controller = 1;
@@ -109,7 +131,6 @@ int main(int argc, char **argv) {
 			user_controller = 0;
 		}
 	}
-
 
 	GLuint dummy_vao;
 	glGenVertexArrays(1, &dummy_vao);
@@ -222,9 +243,11 @@ int main(int argc, char **argv) {
 							zed_controller = 0;
 							user_controller = 1;
 						}
-						zed->set_tracker(controllers[zed_controller]);
-						std::cout << "ZED camera is tracked by controller "
-							<< zed_controller << "\n";
+						if (tracker_index == vr::k_unTrackedDeviceIndexInvalid) {
+							zed->set_tracker(controllers[zed_controller]);
+							std::cout << "ZED camera is tracked by controller "
+								<< zed_controller << "\n";
+						}
 					}
 					if (user_controller != -1 && vr_evt.trackedDeviceIndex == controllers[user_controller]) {
 						if (vr_evt.data.controller.button == vr::k_EButton_SteamVR_Touchpad) {
@@ -260,7 +283,7 @@ int main(int argc, char **argv) {
 
 		if (!zed->calibration.tracker_serial.empty() && !zed->is_tracking()) {
 			zed->find_tracker();
-			if (zed->tracker != vr::k_unTrackedDeviceIndexInvalid) {
+			if (zed->tracker != vr::k_unTrackedDeviceIndexInvalid && zed->tracker != tracker_index) {
 				if (zed->tracker == controllers[0]) {
 					zed_controller = 0;
 					user_controller = 1;
@@ -312,11 +335,15 @@ int main(int argc, char **argv) {
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
 		std::array<glm::mat4, 2> controller_poses;
+		glm::mat4 tracker_pose;
 		for (size_t i = 0; i < controllers.size(); ++i) {
 			if (controllers[i] != vr::k_unTrackedDeviceIndexInvalid) {
 				controller_poses[i] = openvr_m34_to_mat4(
 					vr->tracked_device_poses[controllers[i]].mDeviceToAbsoluteTracking);
 			}
+		}
+		if (tracker_index != vr::k_unTrackedDeviceIndexInvalid) {
+			tracker_pose = openvr_m34_to_mat4(vr->tracked_device_poses[tracker_index].mDeviceToAbsoluteTracking);
 		}
 
 		vr->begin_frame();
@@ -338,6 +365,11 @@ int main(int argc, char **argv) {
 				suzanne.render();
 			}
 			uv_sphere.render();
+
+			if (tracker_index != vr::k_unTrackedDeviceIndexInvalid) {
+				vive_tracker.set_model_mat(tracker_pose);
+				vive_tracker.render();
+			}
 
 			if (calibrating) {
 				point_cloud.render();

@@ -7,7 +7,7 @@ find_package(OpenGL REQUIRED)
 find_package(SDL2 REQUIRED)
 find_package(GLM REQUIRED)
 find_package(OpenVRSDK REQUIRED)
-find_package(ZED 2 REQUIRED)
+find_package(ZED REQUIRED)
 find_package(CUDA REQUIRED)
 
 include_directories(${CUDA_INCLUDE_DIRS} ${ZED_INCLUDE_DIRS}
