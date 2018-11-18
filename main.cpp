@@ -18,8 +18,8 @@
 #include "zed_manager.h"
 #include "imgui-1.52/imgui_impl_sdl_gl3.h"
 
-static int WIN_WIDTH = 1280;
-static int WIN_HEIGHT = 720;
+static int WIN_WIDTH = 1920;
+static int WIN_HEIGHT = 1080;
 
 struct ViewInfo {
 	glm::mat4 view, proj;

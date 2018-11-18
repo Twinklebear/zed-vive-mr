@@ -19,8 +19,8 @@ void ZedCalibration::save(const std::string &calibration_file) const {
 }
 glm::mat4 ZedCalibration::tracker_to_camera() const {
 	const glm::mat4 m = glm::translate(translation)
-		* glm::rotate(glm::radians(rotation.y), glm::vec3(0.f, 1.f, 0.f))
 		* glm::rotate(glm::radians(rotation.x), glm::vec3(1.f, 0.f, 0.f))
+		* glm::rotate(glm::radians(rotation.y), glm::vec3(0.f, 1.f, 0.f))
 		* glm::rotate(glm::radians(rotation.z), glm::vec3(0.f, 0.f, 1.f));
 	return m;
 }
@@ -68,7 +68,7 @@ void ZedCalibration::save_calibration(const std::string &file) const {
 		<< "\nz=" << translation.z
 		<< "\nrx=" << rotation.x
 		<< "\nry=" << rotation.y
-		<< "\nry=" << rotation.z
+		<< "\nrz=" << rotation.z
 		// FoV is ignored in their unity importer, unsure why it's in the file
 		// maybe some legacy reason. Writing it for compatability
 		<< "\nfov=" << fov
@@ -80,10 +80,10 @@ ZedManager::ZedManager(ZedCalibration calibration, std::shared_ptr<OpenVRDisplay
 {
 	sl::InitParameters init_params;
 	init_params.camera_resolution = sl::RESOLUTION_HD1080;
-	init_params.camera_fps = 60;
+	init_params.camera_fps = 30;
 	init_params.coordinate_system = sl::COORDINATE_SYSTEM_RIGHT_HANDED_Y_UP;
 	init_params.depth_mode = sl::DEPTH_MODE_PERFORMANCE;
-	init_params.depth_minimum_distance = 0.7;
+	init_params.depth_minimum_distance = 0.3;
 	init_params.sdk_verbose = false;
 	init_params.coordinate_units = sl::UNIT_METER;
 
